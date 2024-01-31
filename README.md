@@ -45,6 +45,6 @@
 - questions for Chris
 
 
-Wk3 
-qualitative research
-data wrangling
+### Wk3 
+- qualitative research
+- data wrangling
