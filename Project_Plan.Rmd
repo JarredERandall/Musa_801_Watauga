@@ -1,0 +1,198 @@
+---
+title: "Deliverable 1: Project Plan"
+author: "Practicum Spring 2024"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    css: style.css
+    toc: true
+    toc_float: true
+    code_folding: hide
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Workforce Housing in Watauga County, NC
+
+## Project Scope
+
+Watauga County, North Carolina, is currently experiencing a housing
+shortage that is expected to intensify in the near future. The shortage
+is exacerbated by vacation rentals and student housing, which has
+significantly reduced the available residential housing options.
+Currently, there is no streamlined system in place to help identify
+suitable parcels for development. In response to this issue, the Watauga
+Housing Council has contracted us to develop an application-based data
+framework that is designed to identify land parcels based on their
+likelihood to be developed for affordable and workforce housing. This
+data framework will be designed to function as an interactive
+application interface that will allow users to input criteria related to
+land supply and combine it with development likelihood estimates to rank
+each parcel in the county in terms of suitability. We will use the
+administrative record associated with a septic system permit as the key
+indicator for development. This permit is exclusively granted when a
+property satisfies the requirements for both land supply and developer
+demand at that specific site. Our approach will involve identifying the
+site suitability characteristics (e.g., slope, soils) most closely
+related to the probability of a parcel receiving a septic permit.
+Subsequently, we will forecast the likelihood that a given parcel will
+receive a new septic permit application in the next ten years based on
+the analysis of the previous ten years of permits.
+
+## Project Objectives
+
+· Identify the features that influence septic permit receival · Create a
+model that can predict to a degree of certainty which parcels will
+receive a septic permit · Create a data framework that identifies
+parcels based on their estimated likelihood of being developed · Create
+a interactive user interface application where the user can search land
+parcels based on input criteria related to land supply Goals can be
+further broken down in sections: Exploratory Analysis · Understand the
+current state of housing and affordability, development trends, and
+demographics in Watauga and surrounding countries. · Identify the
+characteristics of properties that are sold in the County · Data
+wrangling -- Collect data that influences · Collect septic system permit
+data and Identify the features that influence the approval process.
+Modeling · Test and finalize model predictors. · Figure out temporal
+construction of the model · Validate model App Development · Create app
+wireframe · Develop app · Test app function
+
+## Project Schedule
+
+```{r, echo=FALSE, warning = FALSE, message = FALSE}
+library(tidyverse)
+library(lubridate)
+library(scales)
+library(Cairo)
+
+tasks <- read.csv("tasks.csv")
+
+tasks.long <- tasks %>%
+  mutate(Start = mdy(Start),
+         End = mdy(End)) %>%
+  gather(date.type, task.date, -c(Project, Task)) %>%
+  arrange(date.type, task.date) %>%
+  mutate(Task = factor(Task, levels=rev(unique(Task)), ordered=TRUE))
+
+# Custom theme for making a clean Gantt chart
+theme_gantt <- function(base_size=11, base_family="Arial") {
+  ret <- theme_bw(base_size, base_family) %+replace%
+    theme(panel.background = element_rect(fill="#ffffff", colour=NA),
+          axis.title.x=element_text(vjust=-0.2), axis.title.y=element_text(vjust=1.5),
+          title=element_text(vjust=1.2, family="Arial"),
+          panel.border = element_blank(), axis.line=element_blank(),
+          panel.grid.minor=element_blank(),
+          panel.grid.major.y = element_blank(),
+          panel.grid.major.x = element_line(size=0.5, colour="grey80"),
+          axis.ticks=element_blank(),
+          legend.position="bottom", 
+          axis.title=element_text(size=rel(0.8), family="Arial"),
+          strip.text=element_text(size=rel(1), family="Arial"),
+          strip.background=element_rect(fill="#ffffff", colour=NA),
+          panel.spacing.y=unit(1.5, "lines"),
+          legend.key = element_blank())
+  
+  ret
+}
+
+custom_palette <- c("#8c0101",  "#cc621b", "#ccab18",  "#bcd15e", "#135418", "#a6e0c5","#4287f5", "#142996", "#8e13b0")
+
+
+# Calculate where to put the dotted lines that show up every three entries
+x.breaks <- seq(length(tasks$Task) + 0.5 - 3, 0, by=-3)
+
+# Build plot with adjusted legend placement
+timeline <- ggplot(tasks.long, aes(x=Task, y=task.date, colour=Project)) + 
+  geom_line(size=3, width = 0.6) + 
+  geom_vline(xintercept=x.breaks, colour="grey80", linetype="dotted") + 
+  scale_color_manual(values = custom_palette) +
+  guides(colour=guide_legend(title=NULL)) +
+  labs(x=NULL, y=NULL) + coord_flip() +
+  scale_y_date(date_breaks="1 week", date_labels = "%d %b") +
+  theme_gantt() + 
+  theme(axis.text.x=element_text(angle=45, hjust=1),
+        legend.position = "right")  # Adjust the position of the legend
+
+# Plot the timeline
+timeline
+
+```
+
+## Risk Management
+
+Potential risks we may encounter include: Issues with code and modeling
+(optimization, validation, etc.) Issues with app development and user
+interface Possible issues with knitting
+
+## Communication Plan
+
+**Internal communication**: Whatsapp/Email for messaging. Plan to meet
+on Thursdays outside of class for collaborative working hours.
+
+**Client communication**: initial meeting + interview held over zoom,
+other communication largely held over email.
+
+## Stakeholder Management
+
+Watauga Housing Council: (Kellie Reed Ashcraft, Laura Beach, Chris
+Quattro (Appalachian State University)): Main project client, this
+organization is tasked with responding to the economic, environmental,
+and social aspects of the county to provide adequate housing options for
+all residents. AppHealthCare (Andrew Blethen, Jason Pierce): besides
+their widely-known health-related services, this organization is also
+tasked with operating the permitting of septic and water infrastructure
+in the County.
+
+## Change Management
+
+Because we developed an initial project plan, complete with deadlines,
+deliverables, and tasks, it will be more clear and opaque on how to
+address updates that may come up. Each week, we will evaluate our
+progress against the Project Plan, readjusting deadlines and aspects of
+the deliverables as appropriate. Maintaining flexibility while staying
+on task will be crucial to a successful project.
+
+## Team Roles + Responsibilities
+
+**Project Managers** (*Jarred, Kathleen*) - Keeps team members on task
+and accountable Leads team sprints Manages communications
+
+**Markdown + Github Lead**\* - (*Jingyi, Kathleen*) - Keeps team
+markdown updated Publishes md / rmd for professor review each week
+
+**JS Engineering Lead** - (*Alice, Yinan*) - Leads app development
+
+*Other role possibilities:*
+
+**Model Engineering Lead** - *Jingyi*
+
+**Lead Researcher** - *Jarred*
+
+**Exploratory Analysis Lead** - *Yinan*
+
+**Lead Writer** - *Kathleen*
+
+## Monitoring + Evaluation
+
+We are in the process of developing a comprehensive project task list,
+which will include a detailed breakdown of the project scope, outlining
+all major objectives and their corresponding subtasks. We will conduct
+weekly review meetings where we will discuss the progress of each task
+in conjunction with the project schedule. This will ensure that we
+remain on track with the projected deadlines and allows us to make any
+necessary adjustments to keep the project aligned with our goals.
+
+## Closure + Documentation
+
+will develop a project closeout checklist that will outline all
+necessary steps for creating the final deliverables and documentation.
+Once the checklist is finalized, we will assign specific tasks to each
+team member and collaborate to ensure the completion of all necessary
+activities. Additionally, we have allocated a sufficient amount of time
+to facilitate the development and completion of all tasks involved in
+the project closeout process.
