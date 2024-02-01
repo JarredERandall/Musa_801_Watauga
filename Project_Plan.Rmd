@@ -46,25 +46,52 @@ the analysis of the previous ten years of permits.
 
 ## Project Objectives
 
-· Identify the features that influence septic permit receival · Create a
-model that can predict to a degree of certainty which parcels will
-receive a septic permit · Create a data framework that identifies
-parcels based on their estimated likelihood of being developed · Create
-a interactive user interface application where the user can search land
-parcels based on input criteria related to land supply Goals can be
-further broken down in sections: Exploratory Analysis · Understand the
-current state of housing and affordability, development trends, and
-demographics in Watauga and surrounding countries. · Identify the
-characteristics of properties that are sold in the County · Data
-wrangling -- Collect data that influences · Collect septic system permit
-data and Identify the features that influence the approval process.
-Modeling · Test and finalize model predictors. · Figure out temporal
-construction of the model · Validate model App Development · Create app
-wireframe · Develop app · Test app function
+-   Identify the features that influence septic permit receival.
+
+-   Create a model that can predict to a degree of certainty which
+    parcels will receive a septic permit.
+
+-   Create a data framework that identifies parcels based on their
+    estimated likelihood of being developed.
+
+-   Create a interactive user interface application where the user can
+    search land parcels based on input criteria related to land supply.
+
+*Goals can be further broken down into phases:*
+
+**Exploratory Analysis**
+
+-   Understand the current state of housing and affordability,
+    development trends, and demographics in Watauga and surrounding
+    countries.
+
+-   Identify the characteristics of properties that are sold in the
+    County.
+
+-   Data wrangling -- Collect data that influences.
+
+-   Collect septic system permit data and Identify the features that
+    influence the approval process.
+
+**Modeling**
+
+-   Test and finalize model predictors.
+
+-   Figure out temporal construction of the model.
+
+-   Validate model.
+
+**App Development**
+
+-   Create app wireframe.
+
+-   Develop app.
+
+-   Test app function.
 
 ## Project Schedule
 
-```{r, echo=FALSE, warning = FALSE, message = FALSE}
+```{r gant, echo=FALSE, warning = FALSE, message = FALSE}
 library(tidyverse)
 library(lubridate)
 library(scales)
@@ -125,9 +152,13 @@ timeline
 
 ## Risk Management
 
-Potential risks we may encounter include: Issues with code and modeling
-(optimization, validation, etc.) Issues with app development and user
-interface Possible issues with knitting
+Potential risks we may encounter include:
+
+-   Issues with code and modeling (optimization, validation, etc.)
+
+-   Issues with app development and user interface
+
+-   Possible issues with knitting
 
 ## Communication Plan
 
@@ -167,8 +198,6 @@ markdown updated Publishes md / rmd for professor review each week
 
 **JS Engineering Lead** - (*Alice, Yinan*) - Leads app development
 
-*Other role possibilities:*
-
 **Model Engineering Lead** - *Jingyi*
 
 **Lead Researcher** - *Jarred*
@@ -189,7 +218,7 @@ necessary adjustments to keep the project aligned with our goals.
 
 ## Closure + Documentation
 
-will develop a project closeout checklist that will outline all
+We will develop a project closeout checklist that will outline all
 necessary steps for creating the final deliverables and documentation.
 Once the checklist is finalized, we will assign specific tasks to each
 team member and collaborate to ensure the completion of all necessary
