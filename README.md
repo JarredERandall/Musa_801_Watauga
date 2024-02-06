@@ -23,28 +23,25 @@
   - Questions we want to answer in exploratory analysis
 
 -  Talk with Matt
-  - use case: improve affordable housing by high-development sites…
-  - send github repo link to Matt
-  - Matt github username: mrecos
-
+  - use case: improve affordable housing by high-development sites
+  
 - meetings
-  - Chris Wed
-  - Andy and Jason next week
-
-- raster and vector
-  - raster may be difficult to store over larger areas / with more     data entries
-  - pick a crs: UTM zone 17
-  - slope: 10-meter cell size
-
-- qualitative research
-  - understanding building codes
-  - current zoning + cadastral data
+  - Chris Meeting
+  - Prepare questions
+  - Review Information
+  - Meeting Notes
+  -Andy and jason - Apphealth
+  
+- send github repo link to Matt & Michael
+  - send github repo link to Matt
 
 - web scraping
 
-- questions for Chris
 
-
-### Wk3 
-- qualitative research
-- data wrangling
+  
+  
+### Wk3
+02/06/2024  
+- Wrap up qualitative research
+- Wrap up data wrangling
+- Meet with Andrew, Jason, and 
