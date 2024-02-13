@@ -45,3 +45,13 @@
 - Wrap up qualitative research
 - Wrap up data wrangling
 - Meet with Andrew, Jason, and 
+
+### Wk4
+02/13/2024
+- Review Qualitative Research
+- Review Slides
+- Go over Data Wrangling
+  - Make sure were not missing anything (create game plan if we are)
+- Speak with Watauga County Soil and Water about best soils for development
+- Go over Schedule 
+- Create detailed task list for first deliverable 

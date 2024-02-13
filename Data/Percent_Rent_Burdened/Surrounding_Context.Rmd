@@ -1,0 +1,125 @@
+---
+title: "Watauga"
+author: "Jarred_Randall"
+date: "2024-02-12"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Library}
+library(tidyverse)
+library(tidycensus)
+library(sf)
+library(dplyr)
+
+```
+
+
+# Data Wrangling Percent Rent Burdened by Surrounding Counties 
+```{r}
+
+county17 <- 
+  get_acs(geography = "county", 
+          variables = c("B25070_007E",
+                        "B25070_008E",
+                        "B25070_009E",
+                        "B25070_010E",
+                        "B25070_011E",
+                        "B25003_003E"), 
+          year=2017, state="NC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('EPSG:4326') %>%
+  rename(RentBurden_30_35 = B25070_007E,
+         RentBurden_35_39 = B25070_008E,
+         RentBurden_40_49 = B25070_009E,
+         RentBurden_50_99 = B25070_010E,
+         RentBurden_60_more = B25070_011E,
+         total_renter_occupied = B25003_003E) %>%
+  dplyr::select(-starts_with("B")) %>%
+  mutate(rent_burdened_households = RentBurden_30_35 + RentBurden_35_39 + RentBurden_40_49 + RentBurden_50_99 + RentBurden_60_more,
+         Percent_rent_burdened = round((rent_burdened_households / total_renter_occupied) * 100, 0),
+         NAME = str_replace(NAME, ", North Carolina", "")) %>%
+  filter(NAME %in% c("Avery County", "Wilkes County", "Ashe County", "Watauga County","Caldwell County")) %>%
+  select(GEOID, NAME, rent_burdened_households, total_renter_occupied, Percent_rent_burdened)
+
+
+
+county22 <- 
+  get_acs(geography = "county", 
+          variables = c("B25070_007E",
+                        "B25070_008E",
+                        "B25070_009E",
+                        "B25070_010E",
+                        "B25070_011E",
+                        "B25003_003E"), 
+          year=2022, state="NC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('EPSG:4326') %>%
+  rename(RentBurden_30_35 = B25070_007E,
+         RentBurden_35_39 = B25070_008E,
+         RentBurden_40_49 = B25070_009E,
+         RentBurden_50_99 = B25070_010E,
+         RentBurden_60_more = B25070_011E,
+         total_renter_occupied = B25003_003E) %>%
+  dplyr::select(-starts_with("B")) %>%
+  mutate(rent_burdened_households = RentBurden_30_35 + RentBurden_35_39 + RentBurden_40_49 + RentBurden_50_99 + RentBurden_60_more,
+         Percent_rent_burdened = round((rent_burdened_households / total_renter_occupied) * 100, 0),
+         NAME = str_replace(NAME, ", North Carolina", "")) %>%
+  filter(NAME %in% c("Avery County", "Wilkes County", "Ashe County", "Watauga County", "Caldwell County")) %>%
+  select(GEOID, NAME, rent_burdened_households, total_renter_occupied, Percent_rent_burdened)
+
+county17 <- county17 %>% mutate(year = 2017)
+county22 <- county22 %>% mutate(year = 2022)
+
+combined_years <- bind_rows(county17, county22)
+
+
+
+```
+
+# Maps
+```{r}
+
+ggplot(data = county17) +
+  geom_sf(aes(fill = Percent_rent_burdened), color = color_palette) +
+  geom_sf_text(aes(label = NAME), 
+                size = 4, # Adjusted size
+                colour = "white", 
+                check_overlap = TRUE,
+                fontface = "bold") + # Make text bold
+  geom_sf_text(aes(label = paste0(Percent_rent_burdened, "%")), 
+               size = 3.5, # Adjusted size
+               colour = "white", 
+               check_overlap = TRUE, 
+               nudge_y = -0.05,
+               fontface = "bold") + # Make text bold
+  labs(title = "Rent Burdened Households by County",
+       subtitle = "Year: 2017") +
+  theme_void() +
+  theme(legend.position = "right")
+```
+
+
+```{r}
+
+ggplot(data = county22) +
+  geom_sf(aes(fill = Percent_rent_burdened), color = color_palette) +
+  geom_sf_text(aes(label = NAME), 
+                size = 4, # Adjusted size
+                colour = "white", 
+                check_overlap = TRUE,
+                fontface = "bold") + # Make text bold
+  geom_sf_text(aes(label = paste0(Percent_rent_burdened, "%")), 
+               size = 3.5, # Adjusted size
+               colour = "white", 
+               check_overlap = TRUE, 
+               nudge_y = -0.05,
+               fontface = "bold") + # Make text bold
+  labs(title = "Rent Burdened Households by County",
+       subtitle = "Year: 2022") +
+  theme_void() +
+  theme(legend.position = "right")
+```
