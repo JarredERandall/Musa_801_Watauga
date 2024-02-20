@@ -10,11 +10,13 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r Library}
+install.packages("raster")
+
 library(tidyverse)
 library(tidycensus)
 library(sf)
 library(dplyr)
-
+library(raster) 
 ```
 
 
@@ -122,4 +124,30 @@ ggplot(data = county22) +
        subtitle = "Year: 2022") +
   theme_void() +
   theme(legend.position = "right")
+```
+
+```{r read_data}
+
+boundary <- st_read("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/GeoJSON/Boundary.geojson")
+
+fire_districts <- st_read("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/GeoJSON/FireDistricts_FeaturesToJSON.geojson")
+
+managed_areas <- st_read("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/GeoJSON/managed_areasToJSON.geojson")
+
+natural_areas <- st_read("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/GeoJSON/Natural_area_JSON.geojson")
+
+zoned_areas <- st_read("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/GeoJSON/zonedareas_FeaturesToJSON.geojson")
+
+municipal_bound <- st_read("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/GeoJSON/NCDOT_Municipal_Boundaries.geojson")
+
+county_bound <- st_read("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/GeoJSON/NCDOT_County_Boundaries.geojson")
+
+# Landcover Vector
+
+land_cover <- raster("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/Landuse_Raster/LandCover_Watauga/landuse_2019.tif")
+
+
+
+
+
 ```
