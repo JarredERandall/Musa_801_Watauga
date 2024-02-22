@@ -193,7 +193,7 @@ ggplot() +
   geom_sf(data = boundary, fill = NA, color = "black") + 
   geom_sf(data = managed_areas, aes(fill = OWNER_TYPE)) + 
   scale_fill_manual(values = color_palette) + 
-  labs(title = "Watauga Managed Areas by Name",
+  labs(title = "Watauga Managed Areas by Owner Type",
        subtitle = "Year: 2022") +
   theme_void() +
   theme(legend.position = "right")
@@ -204,7 +204,7 @@ ggplot() +
   geom_sf(data = boundary, fill = NA, color = "black") + 
   geom_sf(data = natural_areas, aes(fill = C_RATING)) + 
   scale_fill_manual(values = color_palette) + 
-  labs(title = "Watauga Natural Areas by Name",
+  labs(title = "Watauga Natural",
        subtitle = "Year: 2022") +
   theme_void() +
   theme(legend.position = "right")
