@@ -36,6 +36,18 @@ library(kableExtra)
 
 color_palette <- c("#e2a334", "#f9bf3e", "#fcd977", "#9ad7d2", "#74c1b9")
 ```
+# Write up
+
+## Problem Statement / Use Case
+
+Watauga County, North Carolina, is currently experiencing a housing shortage that is expected to intensify in the near future. The shortage is exacerbated by vacation rentals and student housing, which has significantly reduced the available residential housing options. The Watauga Housing Solutions Committee is partnering with other community and local government organizations looking to develop affordable and workforce housing in order to mitigate the severe decreases in housing affordability. They are working with a developer to prioritize the most feasible sites to pursue for purchase and development. Because of the extreme physical conditions of the landscape (slope, soils, etc.) there is currently no streamlined system in place to help identify suitable parcels for development. In response to this issue, we have been contracted to develop an application-based data framework that is designed to identify land parcels based on their likelihood to be developed for affordable and workforce housing.  This data framework will be designed to function as an interactive application interface that will allow users to input criteria related to land supply and combine it with development likelihood estimates to rank each parcel in the county in terms of suitability.
+
+## Project Client:
+
+The main project client is the Watauga Housing Council and its Housing Solutions Committee. This organization is tasked with responding to the economic, environmental, and social aspects of the county to provide adequate housing options for all residents. our main points of contacts within the housing council are Dr. Kellie Reed Ashcraft, Facilitator/Organizer, Watauga Housing Council, Dr. Chris Quattro, Assistant Professor, Appalachian State University/Member, Watauga Housing Council , Laura Beach, Member, Watauga Housing Council. 
+
+## Dependent Variable: Septic System Permits 
+The key indicator for development (dependent variable) that will be used is the administrative record associated with septic system permits. This permit is exclusively granted when a property satisfies the requirements for both land supply and developer demand at that specific site. Due to the rural nature of the project area, there is relatively low wastewater sewer coverage. subsequently, a septic system is critical for new development, and a site cannot be developed without one. Our approach will involve identifying the site suitability characteristics (e.g., slope, soils) most closely related to the probability of a parcel receiving a septic permit. Using this information, we will forecast the likelihood that a given parcel will receive a new septic permit. 
 
 
 # Data Wrangling Percent Rent Burdened by Surrounding Counties 
