@@ -12,7 +12,10 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r Library}
 install.packages("FedData")
 install.packages("animation")
-
+library(raster) 
+library(rgdal)
+library(animation)
+library(rasterVis)
 library(FedData)
 library(tidyverse)
 library(tidycensus)
@@ -109,6 +112,25 @@ county22 <- county22 %>% mutate(year = 2022)
 combined_years <- bind_rows(county17, county22)
 
 
+
+county22 <- 
+  get_acs(geography = "county", 
+          variables = c("B25070_007E",
+                        "B25070_008E",
+                        "B25070_009E",
+                        "B25070_010E",
+                        "B25070_011E",
+                        "B25003_003E"), 
+          year=2022, state="NC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('EPSG:4326') %>%
+  rename(RentBurden_30_35 = B25070_007E,
+         RentBurden_35_39 = B25070_008E,
+         RentBurden_40_49 = B25070_009E,
+         RentBurden_50_99 = B25070_010E,
+         RentBurden_60_more = B25070_011E,
+         total_renter_occupied = B25003_003E) %>%
+  dplyr::select(-starts_with("B"))
 
 ```
 
@@ -210,7 +232,13 @@ ggplot() +
   theme(legend.position = "right")
 ```
 
-# Land Cover 10 year changes
+
+
+# Watauga 2021 Land cover
+
+The Watauga County 2021 land cover underscores the county's rich natural resources and moderate urban development. The total land cover area is predominantly forested land (74.56%), with 54.16% of the county’s land cover area being deciduous forest and 19.2% mixed forest, and 1.2% evergreen forest. Developed areas, which is limited to about 13.89% of the total land cover area is made up of 11.23% of developed open space, 1.48% developed low intensity, 0.9% developed medium density, 0.28% developed high intensity. The majority of development is classified as open space, which could encompass parks, golf courses, or agricultural land that adds to the rural character of the county. The incrementally smaller percentages for low, medium, and high-intensity developments indicate concentrated urbanization around cities and transportation corridors, reflecting strategic land use planning that preserves the natural landscape while accommodating residential and commercial needs.
+
+
 
 ```{r}
 
@@ -308,7 +336,9 @@ levelplot(rat5, att='ID',
 
 
 ```
+# Land Cover 10 year changes
 
+From 2011 and 2021 Watauga County witnessed a notable shift in land cover, particularly in terms of development and the reduction of natural landscapes like grasslands and shrublands. The data indicates a 13.89% increase in developed areas, with significant growth in low, medium, and high-intensity developments. Most notably, medium intensity development saw a significant increase of 17.22% in 2021. Concurrently, the county experienced a dramatic 56.5% decrease in Grassland/Herbaceous areas and a 50% reduction in Shrub/Scrub land. These changes could be attributed to several factors, including the conversion of open fields and grasslands into developed land or possibly into agricultural use. The majority of the land cover remains natural or semi-natural, with developed open spaces also experiencing a small rise. The data suggests a careful balance between development and the maintenance of natural land covers over the past decade.
 
 ```{r}
 
@@ -348,7 +378,6 @@ for (i in 1:length(years)) {
   names(d)[ncol(d)]<-paste0("pix_", years[[i]])
   }
 
-# Now, a few percent change calculations:
 
 d$square.mile.change<-(d$pix_2021 - d$pix_2011) * 30 * 30 * 0.00000038610
 d$percentchange<-(d$pix_2021 - d$pix_2011)/d$pix_2011
@@ -357,10 +386,12 @@ d$prop2021<-d$pix_2021/sum(d$pix_2021)
 d$percentchange.2011.2021<-paste(round(100*d$percentchange, 2), "%", sep="")
 d$percent.area.2021<-paste(round(100*d$prop2021, 2), "%", sep="")
 
-# Make it a pretty table with kable:
+
 
 
 kable(d[,c(2,10,13,14)])  %>%
   kable_styling(bootstrap_options = c("striped", "hover"), full_width = F)
+
+
 
 ```
