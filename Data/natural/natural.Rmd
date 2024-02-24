@@ -161,7 +161,7 @@ ggplot() +
       labs(title="Distance to the Nearest Road") +
       mapTheme()
 ```
-Accessibility to transportation infrastructure significantly influences the development potential of a parcel. Typically, proximity to the road network directly correlates with higher accessibility. However, the graphic reveals certain parcels lacking adequate access to roads, indicating potential limitations in their development value.
+Accessibility to transportation infrastructure significantly influences the development potential of a parcel. Typically, proximity to the road network directly correlates with higher accessibility. However, the graphic reveals certain parcels lacking adequate access to roads, indicating potential limitations in their development value. After analysis we can see that south-west and north-east Watauga is less connected.
 
 ```{r}
 plot <-ggplot() +
