@@ -39,7 +39,7 @@ source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-L
 
 ```
 
-You can also embed plots, for example:
+
 ```{r pressure, echo=FALSE}
 landslide = st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Data/natural/landslide.geojson")
 
@@ -99,9 +99,11 @@ ggplot() +
       geom_sf(data = final, aes(fill=landslide.nn), colour=NA) +
   #geom_sf(data = parcel, fill = "transparent", colour = "red", size = 0.005) +  # Adjust the size here
       scale_fill_viridis(name="Landslide Distance") +
-      labs(title="Distance to the two nearest landslide points") +
+      labs(title="Distance to the two Nearest Landslide Points") +
       mapTheme()
 ```
+
+Landslides pose the primary hazard in Watauga County, and the safety of each parcel correlates with its distance from landslide-prone areas. Illustrated in the provided figure, the northeastern region of Watauga emerges as the safest zone. This safety is partly attributable to the gentle slope characteristic of this particular area.
 
 ```{r save}
 plot <-ggplot() +
@@ -119,18 +121,19 @@ ggsave("landslide.jpg", plot, dpi = 300)
 ggplot() +
       geom_sf(data = final, aes(fill=watershed.nn), colour=NA) +
   #geom_sf(data = parcel, fill = "transparent", colour = "red", size = 0.005) +  # Adjust the size here
-      scale_fill_viridis(name="Watershed Distance") +
-      labs(title="Distance to the Nearest Watershed") +
+      scale_fill_viridis(name="Watersupply Distance") +
+      labs(title="Distance to the Nearest Water supply") +
       mapTheme()
 ```
+Water supply plays a crucial role in Watauga County's landscape. Given the potential environmental ramifications, it's imperative to maintain a safe distance between the septic systems and the water supply areas. Through comprehensive analysis, it's evident that the middle region of Watauga County is adjacent to these critical water supply zones. Consequently, when installing septic systems in this area, careful attention must be paid to mitigating environmental risks and preventing water pollution.
 
 
 ```{r}
 plot <-ggplot() +
       geom_sf(data = final, aes(fill=watershed.nn), colour=NA) +
   #geom_sf(data = parcel, fill = "transparent", colour = "red", size = 0.005) +  # Adjust the size here
-      scale_fill_viridis(name="Watershed Distance") +
-      labs(title="Distance to the Nearest Watershed") +
+      scale_fill_viridis(name="Watersupply Distance") +
+      labs(title="Distance to the Nearest Water supply") +
       mapTheme()
 ggsave("watersupply.jpg", plot, dpi = 300)
 
@@ -158,6 +161,7 @@ ggplot() +
       labs(title="Distance to the Nearest Road") +
       mapTheme()
 ```
+Accessibility to transportation infrastructure significantly influences the development potential of a parcel. Typically, proximity to the road network directly correlates with higher accessibility. However, the graphic reveals certain parcels lacking adequate access to roads, indicating potential limitations in their development value.
 
 ```{r}
 plot <-ggplot() +
@@ -181,6 +185,8 @@ ggplot() +
       labs(title="Distance to the Nearest Waterbody") +
       mapTheme()
 ```
+
+The presence of water bodies is integral to our evaluation framework. They significantly influence the water table, consequently affecting the design and placement of septic systems. Watauga County boasts a dense network of waterways. Despite this, we prioritize calculating the distance from the center of mass to the nearest river in our assessments. Overall, the variance in proximity to water bodies among parcels is minimal.
 
 ```{r}
 plot <-ggplot() +
