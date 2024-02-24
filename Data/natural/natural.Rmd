@@ -1,0 +1,194 @@
+---
+title: "Distance_Processing"
+output: html_document
+date: "2024-02-19"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE , results='hide')
+```
+
+# Data Loading
+
+```{r set_up, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,  message = FALSE, warning = FALSE)
+
+library(tidyverse)
+library(sf)
+library(RSocrata)
+library(viridis)
+library(spatstat)
+library(raster)
+library(spdep)
+library(FNN)
+library(grid)
+library(gridExtra)
+library(knitr)
+library(kableExtra)
+library(tidycensus)
+library(classInt)   # for KDE and ML risk class intervals
+library(mapview)
+# functions
+root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/"
+source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
+
+```
+
+You can also embed plots, for example:
+```{r pressure, echo=FALSE}
+landslide = st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Data/natural/landslide.geojson")
+
+boundary = st_read('https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Data/natural/Boundary.geojson')
+
+watersupply = st_read('https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Data/natural/water_supply.geojson')
+```
+
+
+```{r pressure, echo=FALSE}
+line = st_read('https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Data/natural/line.geojson')
+
+parcel = st_read('https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Data/natural/parcel.geojson')
+```
+
+```{r}
+# Calculate the centroid of each parcel
+parcel_centroids <- st_centroid(parcel)
+```
+
+
+```{r}
+distance = parcel
+
+# Add a column named 'centroid_geometry' to the parcel dataset
+distance$centroid_geometry <- parcel_centroids
+```
+
+
+# Distance to landslide
+```{r}
+landslide_geometry <- st_geometry(landslide)
+
+# Convert the geometry to a data frame
+landslide_df <- as.data.frame(landslide_geometry)
+```
+
+```{r}
+st_c <- st_coordinates
+st_coid <- st_centroid
+
+test1<-st_c(st_coid(parcel))
+test2<- st_c(st_coid(landslide))
+test3 <- st_c(st_coid(watersupply))
+
+final <- parcel %>%
+    mutate(
+      landslide.nn =
+        nn_function(test1, test2,k=2),
+      watershed.nn = 
+        nn_function(test1, test3, k = 1))
+```
+
+
+```{r}
+ggplot() +
+      geom_sf(data = final, aes(fill=landslide.nn), colour=NA) +
+  #geom_sf(data = parcel, fill = "transparent", colour = "red", size = 0.005) +  # Adjust the size here
+      scale_fill_viridis(name="Landslide Distance") +
+      labs(title="Distance to the two nearest landslide points") +
+      mapTheme()
+```
+
+```{r save}
+plot <-ggplot() +
+      geom_sf(data = final, aes(fill=landslide.nn), colour=NA) +
+  #geom_sf(data = parcel, fill = "transparent", colour = "red", size = 0.005) +  # Adjust the size here
+      scale_fill_viridis(name="Landslide Distance") +
+      labs(title="Distance to the Two Nearest Landslide Points") +
+      mapTheme()
+ggsave("landslide.jpg", plot, dpi = 300)
+```
+
+# Distance to watershed
+
+```{r}
+ggplot() +
+      geom_sf(data = final, aes(fill=watershed.nn), colour=NA) +
+  #geom_sf(data = parcel, fill = "transparent", colour = "red", size = 0.005) +  # Adjust the size here
+      scale_fill_viridis(name="Watershed Distance") +
+      labs(title="Distance to the Nearest Watershed") +
+      mapTheme()
+```
+
+
+```{r}
+plot <-ggplot() +
+      geom_sf(data = final, aes(fill=watershed.nn), colour=NA) +
+  #geom_sf(data = parcel, fill = "transparent", colour = "red", size = 0.005) +  # Adjust the size here
+      scale_fill_viridis(name="Watershed Distance") +
+      labs(title="Distance to the Nearest Watershed") +
+      mapTheme()
+ggsave("watersupply.jpg", plot, dpi = 300)
+
+```
+
+# Line_Distance
+
+```{r}
+line <- line %>%
+               rename(Dist_Road = `Road_Dist`)
+```
+
+```{r}
+line2 <- st_transform(line, st_crs(final))
+combined_df <- cbind(final, line2)
+```
+
+
+## Distance to nearest Road
+```{r}
+ggplot() +
+      geom_sf(data = combined_df, aes(fill=Dist_Road), colour=NA) +
+  #geom_sf(data = parcel, fill = "transparent", colour = "red", size = 0.005) +  # Adjust the size here
+      scale_fill_viridis(name="Road Distance") +
+      labs(title="Distance to the Nearest Road") +
+      mapTheme()
+```
+
+```{r}
+plot <-ggplot() +
+      geom_sf(data = combined_df, aes(fill=Dist_Road), colour=NA) +
+  #geom_sf(data = parcel, fill = "transparent", colour = "red", size = 0.005) +  # Adjust the size here
+      scale_fill_viridis(name="Road Distance") +
+      labs(title="Distance to the Nearest Road") +
+      mapTheme()
+ggsave("road.jpg", plot, dpi = 300)
+
+```
+
+
+## Distance to nearest Waterbody
+
+```{r}
+ggplot() +
+      geom_sf(data = combined_df, aes(fill=Dist_Flowline), colour=NA) +
+  #geom_sf(data = parcel, fill = "transparent", colour = "red", size = 0.005) +  # Adjust the size here
+      scale_fill_viridis(name="Water Distance") +
+      labs(title="Distance to the Nearest Waterbody") +
+      mapTheme()
+```
+
+```{r}
+plot <-ggplot() +
+      geom_sf(data = combined_df, aes(fill=Dist_Flowline), colour=NA) +
+  #geom_sf(data = parcel, fill = "transparent", colour = "red", size = 0.005) +  # Adjust the size here
+      scale_fill_viridis(name="Water Distance") +
+      labs(title="Distance to the Nearest Waterbody") +
+      mapTheme()
+ggsave("waterbody.jpg", plot, dpi = 300)
+
+```
