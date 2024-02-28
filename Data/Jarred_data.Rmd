@@ -232,22 +232,69 @@ ggplot() +
   theme(legend.position = "right")
 ```
 
+####### Updated Landcover section
 
-
-# Watauga 2021 Land cover
+### Watauga 2021 Land cover 
 
 The Watauga County 2021 land cover underscores the county's rich natural resources and moderate urban development. The total land cover area is predominantly forested land (74.56%), with 54.16% of the county’s land cover area being deciduous forest and 19.2% mixed forest, and 1.2% evergreen forest. Developed areas, which is limited to about 13.89% of the total land cover area is made up of 11.23% of developed open space, 1.48% developed low intensity, 0.9% developed medium density, 0.28% developed high intensity. The majority of development is classified as open space, which could encompass parks, golf courses, or agricultural land that adds to the rural character of the county. The incrementally smaller percentages for low, medium, and high-intensity developments indicate concentrated urbanization around cities and transportation corridors, reflecting strategic land use planning that preserves the natural landscape while accommodating residential and commercial needs.
 
-
-
-```{r}
-
+```{r lc_2021, echo=FALSE, message=FALSE, warning=FALSE}
 s <- stack(lc_2011, lc_2013, lc_2016,lc_2019, lc_2021 )
 
 
 
 vals <-unique(s[[5]])  # Get unique values from lc_2021
 df <- legend[legend$ID %in% vals,]  # Filter legend information based on lc_2021 values
+rat5 <- ratify(lc_2021)
+
+levelplot(rat5, att='ID', 
+          col.regions=df$Color,
+          maxpixels=ncell(rat5), # Try setting maxpixels to the number of cells in the raster
+          par.settings = list(
+            axis.line = list(col = "transparent"), 
+            strip.background = list(col = 'transparent'), 
+            strip.border = list(col = 'transparent')
+          ), 
+          scales = list(col = "transparent"),
+          colorkey = FALSE,
+          key = myKey,
+          main = "Watauga 2021 Land Cover") # Title added here
+
+```
+
+#### Land Cover 10 year changes {.tabset}
+
+From 2011 and 2021 Watauga County witnessed a notable shift in land cover, particularly in terms of development and the reduction of natural landscapes like grasslands and shrublands. The data indicates a 13.89% increase in developed areas, with significant growth in low, medium, and high-intensity developments. Most notably, medium intensity development saw a significant increase of 17.22% in 2021. Concurrently, the county experienced a dramatic 56.5% decrease in Grassland/Herbaceous areas and a 50% reduction in Shrub/Scrub land. These changes could be attributed to several factors, including the conversion of open fields and grasslands into developed land or possibly into agricultural use. The majority of the land cover remains natural or semi-natural, with developed open spaces also experiencing a small rise. The data suggests a careful balance between development and the maintenance of natural land covers over the past decade.
+
+##### 2011-2021 {.unnumbered}
+
+```{r lc_time_series, echo=FALSE, message=FALSE, warning=FALSE}
+
+years.list <- list("2011", "2013", "2016", "2019", "2021")
+
+
+suppressMessages({saveGIF({
+  for(i in 1:nlayers(s)){
+    rat <- ratify(s[[i]])
+    plot <- levelplot(rat, att='ID',
+              maxpixels=ncell(rat),
+              col.regions=df$Color,
+              par.settings = list(axis.line = list(col = "transparent"), 
+                                  strip.background = list(col = 'transparent'), 
+                                  strip.border = list(col = 'transparent')), 
+              scales = list(col = "transparent"),
+              main=paste0("Watauga County land cover ", years.list[[i]]),
+              colorkey=FALSE)
+    print(plot)
+  }
+}, interval=1, movie.name="lc_time_series.gif", ani.width=1200, ani.height=900)})
+```
+
+##### 2011 {.unnumbered}
+
+```{r lc_2011, echo=FALSE, message=FALSE, warning=FALSE}
+
+
 
 rat <- ratify(lc_2011)
 
@@ -271,8 +318,11 @@ levelplot(rat, att='ID',
           colorkey = FALSE,
           key = myKey,
           main = "Watauga 2011 Land Cover") # Title added here
+```
 
 
+##### 2013 {.unnumbered}
+```{r lc_2013, echo=FALSE, message=FALSE, warning=FALSE}
 rat2 <- ratify(lc_2013)
 
 levelplot(rat2, att='ID', 
@@ -287,7 +337,10 @@ levelplot(rat2, att='ID',
           colorkey = FALSE,
           key = myKey,
           main = "Watauga 2013 Land Cover") # Title added here
+```
 
+##### 2016 {.unnumbered}
+```{r lc_2016, echo=FALSE, message=FALSE, warning=FALSE}
 rat3 <- ratify(lc_2016)
 
 levelplot(rat3, att='ID', 
@@ -302,7 +355,10 @@ levelplot(rat3, att='ID',
           colorkey = FALSE,
           key = myKey,
           main = "Watauga 2016 Land Cover") # Title added here
+```
 
+##### 2019 {.unnumbered}
+```{r lc_2019, echo=FALSE, message=FALSE, warning=FALSE}
 rat4 <- ratify(lc_2019)
 
 levelplot(rat4, att='ID', 
@@ -317,7 +373,13 @@ levelplot(rat4, att='ID',
           colorkey = FALSE,
           key = myKey,
           main = "Watauga 2019 Land Cover") # Title added here
+```
 
+##### 2021 {.unnumbered}
+
+```{r lc_2021_2, echo=FALSE, message=FALSE, warning=FALSE}
+vals <-unique(s[[5]])  # Get unique values from lc_2021
+df <- legend[legend$ID %in% vals,]  # Filter legend information based on lc_2021 values
 rat5 <- ratify(lc_2021)
 
 levelplot(rat5, att='ID', 
@@ -333,12 +395,13 @@ levelplot(rat5, att='ID',
           key = myKey,
           main = "Watauga 2021 Land Cover") # Title added here
 
-
-
 ```
-# Land Cover 10 year changes
 
-From 2011 and 2021 Watauga County witnessed a notable shift in land cover, particularly in terms of development and the reduction of natural landscapes like grasslands and shrublands. The data indicates a 13.89% increase in developed areas, with significant growth in low, medium, and high-intensity developments. Most notably, medium intensity development saw a significant increase of 17.22% in 2021. Concurrently, the county experienced a dramatic 56.5% decrease in Grassland/Herbaceous areas and a 50% reduction in Shrub/Scrub land. These changes could be attributed to several factors, including the conversion of open fields and grasslands into developed land or possibly into agricultural use. The majority of the land cover remains natural or semi-natural, with developed open spaces also experiencing a small rise. The data suggests a careful balance between development and the maintenance of natural land covers over the past decade.
+
+###### udpate ends here
+
+
+
 
 ```{r}
 
