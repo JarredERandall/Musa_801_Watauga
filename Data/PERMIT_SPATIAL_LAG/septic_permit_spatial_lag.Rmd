@@ -1,0 +1,112 @@
+---
+title: "spatial_lag"
+author: "Yinan_Li"
+date: "2024-03-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Library, echo=FALSE, message=FALSE, warning=FALSE}
+library(sf)
+library(sp)
+library(spdep)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(FNN)
+library(tibble)
+
+# functions
+root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/"
+
+source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
+color_palette <- c("#e2a334", "#f9bf3e", "#fcd977", "#9ad7d2", "#74c1b9")
+```
+
+## Data Engineering
+
+```{r read_permit_data, echo=FALSE, message=FALSE, warning=FALSE}
+boundary <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/GeoJSON/Boundary.geojson")
+parcel <- st_read("https://drive.google.com/uc?export=download&id=1z4HD0F2GHLBk6KKYbn8ABYXeZxEFK2AJ")
+permit_17 <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/GeoJSON/clipped_permit17.geojson")
+permit_22 <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/GeoJSON/clipped_permit22.geojson")
+```
+```{r transfer_crs, echo=FALSE, message=FALSE, warning=FALSE}
+# transfer the crs of permit_17 and permit_22 to the same coordinate system as boundary and parcel
+permit_17 <- st_transform(permit_17, st_crs(parcel))
+permit_22 <- st_transform(permit_22, st_crs(parcel))
+```
+
+```{r join_with_parcel, echo=FALSE, message=FALSE, warning=FALSE}
+# Join septic permits to parcel
+parcel_2017 <- st_join(permit_17, parcel)
+parcel_2022 <- st_join(permit_22, parcel)
+```
+
+```{r summarize_n_permit, echo=FALSE, message=FALSE, warning=FALSE}
+# Group permit_17 by PARCELID and count the number of points
+permit_17_summary <- st_drop_geometry(parcel_2017) %>%  # Drop geometry to avoid confusion
+  group_by(GlobalID) %>%
+  summarise(n_permit_17 = n())
+
+# Group permit_22 by PARCELID and count the number of points
+permit_22_summary <- st_drop_geometry(parcel_2022) %>%  # Drop geometry to avoid confusion
+  group_by(GlobalID) %>%
+  summarise(n_permit_22 = n())
+
+# Merge the summaries with parcel dataset
+parcel_join <- left_join(parcel, permit_17_summary, by = "GlobalID") %>%
+  left_join(permit_22_summary, by = "GlobalID")
+
+# Replace NA with 0
+parcel_join$n_permit_17[is.na(parcel_join$n_permit_17)] <- 0
+parcel_join$n_permit_22[is.na(parcel_join$n_permit_22)] <- 0
+```
+
+
+## Spatial lag
+
+```{r distance_centroid, echo=FALSE, message=FALSE, warning=FALSE}
+st_c <- st_coordinates
+st_coid <- st_centroid
+
+test1<-st_c(st_coid(parcel))
+test2<- st_c(st_coid(permit_17))
+test3<- st_c(st_coid(permit_22))
+
+parcel_knn <- parcel_join %>%
+    mutate(permit_17.nn_1 = nn_function(test1, test2,k=1),
+           permit_17.nn_2 = nn_function(test1, test2,k=2),
+           permit_17.nn_3 = nn_function(test1, test2,k=3),
+           permit_17.nn_4 = nn_function(test1, test2,k=4),
+           permit_17.nn_5 = nn_function(test1, test2,k=5),
+           permit_22.nn_1 = nn_function(test1, test3,k=1),
+           permit_22.nn_2 = nn_function(test1, test3,k=2),
+           permit_22.nn_3 = nn_function(test1, test3,k=3),
+           permit_22.nn_4 = nn_function(test1, test3,k=4),
+           permit_22.nn_5 = nn_function(test1, test3,k=5))
+```
+
+```{r delete_cols, echo=FALSE, message=FALSE, warning=FALSE}
+# only keep the columns 'permit_17.nn_1' to 'permit_22.nn_5'
+parcel_final <- parcel_knn %>%
+  select(GlobalID, n_permit_17:permit_22.nn_5)
+```
+
+```{r save_geojson, echo=FALSE, message=FALSE, warning=FALSE}
+# Save the final dataset to a geojson file
+st_write(parcel_final, "parcel_spatial_lag.geojson", driver = "GeoJSON")
+```
+
+``` {r save_csv, echo=FALSE, message=FALSE, warning=FALSE}
+# drop the geometry and save it as csv
+parcel_final_df <- st_drop_geometry(parcel_final)
+write.csv(parcel_final_df, "parcel_spatial_lag.csv", row.names = FALSE)
+```
+
+
+
+
