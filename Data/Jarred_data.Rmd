@@ -27,21 +27,16 @@ library(tidyverse)
 library(tidycensus)
 library(sf)
 library(dplyr)
-library(raster) 
-library(rgdal)
 library(animation)
-library(rasterVis)
 library(RColorBrewer) 
 library(ggplot2)      
 library(colorspace)
-library(dplyr)
 library(tidyr)
 library(readr)
-library(sf)
 library(terra)
 library(kableExtra)
-library(terra)
-
+library(exactextractr)
+options(scipen = 999, digits = 2)
 
 
 color_palette <- c("#e2a334", "#f9bf3e", "#fcd977", "#9ad7d2", "#74c1b9")
@@ -229,6 +224,7 @@ ggplot() +
   theme_void() +
   theme(legend.position = "right")
 ```
+
 ```{r}
 
 ggplot() +
@@ -250,6 +246,12 @@ The Watauga County 2021 land cover underscores the county's rich natural resourc
 ```{r lc_2021, echo=FALSE, message=FALSE, warning=FALSE}
 s <- stack(lc_2011, lc_2013, lc_2016,lc_2019, lc_2021 )
 
+
+
+vals <-unique(s[[5]])  # Get unique values from lc_2021
+df <- legend[legend$ID %in% vals,]  # Filter legend information based on lc_2021 values
+rat5 <- ratify(lc_2021)
+
 myKey <- list(
   rectangles = list(col = df$Color),
   text = list(lab = df$Class),
@@ -258,10 +260,6 @@ myKey <- list(
   size = 2,
   cex = .6
 )
-
-vals <-unique(s[[5]])  # Get unique values from lc_2021
-df <- legend[legend$ID %in% vals,]  # Filter legend information based on lc_2021 values
-rat5 <- ratify(lc_2021)
 
 levelplot(rat5, att='ID', 
           col.regions=df$Color,
@@ -475,479 +473,13 @@ kable(d[,c(2,10,13,14)])  %>%
 
 ```
 
+
+## Final Code for landcover percentages per parcel
 ```{r}
-
-library(rgdal)
-library(raster)
-library(rayshader)
-library(sp)
-
-landcover <- raster("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/Landuse_Raster/lulc_2021")
-elevation <- raster("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/Landuse_Raster/dem")
-
-# Reclassify landcover data if necessary
-reclass_matrix <- matrix(c(0,1,1, 2,3,2, 4,5,3), ncol=3, byrow=TRUE)
-landcover_reclassified <- reclassify(landcover, reclass_matrix)
-
-# Convert the elevation raster to a matrix
-elevation_matrix <- matrix(raster::extract(elevation, raster::extent(elevation), buffer=1000),
-                           nrow = ncol(elevation), ncol = nrow(elevation))
-
-# Use rayshader to plot
-elevation_matrix %>%
-  sphere_shade(texture = "desert") %>%
-  add_water(detect_water(elevation_matrix), color = "desert") %>%
-  plot_3d(elevation_matrix, zscale = 10, fov = 0, theta = 0, phi = 90, windowsize = c(1000, 800))
-
-# To save the 3D plot
-rgl::rgl.snapshot("watauga_3d_landcover.png")
-
-```
-
-```{r}
-parcels = spTransform(parcels,crs(lc_2016))
-
-
-
-# Only if you are using the raster package and lc_2016 is a RasterLayer
-library(raster)
-
-# Reproject the raster to match the CRS of the parcels vector data
-lc_2016_reproj <- projectRaster(lc_2016, crs=crs(parcels))
-lc_2021_reproj <- projectRaster(lc_2021, crs=crs(parcels))
-
-# Extract raster values into a list (each list element corresponds to a parcel)
-land_cover_values <- extract(lc_2016_reproj, parcels)
-
-# If you want to directly append the most frequent land cover type to the parcels, use:
-parcel_data$land_cover_type <- lapply(land_cover_values, function(x) {
-  names(sort(table(x), decreasing = TRUE))[1]
-})
-
-unique_land_cover_values <- unique(lc_2021_reproj[])
-
-
-# Define land cover classes based on the provided IDs
-classes <- c(11, 12, 21, 22, 23, 24, 31, 41, 42, 43, 
-             51, 52, 71, 72, 73, 74, 81, 82, 90, 95)
-
-
-
-# Load required library
-install.packages("exactextractr")
-library(exactextractr)
-
-
-
-# Load vector parcel file
-
-
-# Perform exact extraction for each parcel
-extracted_values <- Map(exactextractr::exact_extract, rep(list(lc_2016_reproj), nrow(parcels)), sf::st_geometry(parcels))
-
-# Calculate total area of each parcel
-parcel_areas <- sf::st_area(parcels)
-
-# Calculate percentages of land use types within each parcel
-percentage_landuse <- lapply(extracted_values, function(x) {
-  if (length(x) == 0) {
-    percentages <- rep(NA, ncol(landuse))
-  } else {
-    percentages <- x / sum(x) * 100  # Calculate percentage
-  }
-  return(percentages)
-})
-
-# Combine percentages with parcel IDs
-result <- cbind(parcels$PARCELID, do.call(rbind, percentage_landuse))
-colnames(result) <- c("Parcel_ID", levels(landuse))
-
-# Print or save the result
-print(result)
-
-
-sum_cover <- function(x){
-  list(x %>%
-    group_by(value) %>%
-    summarize(total_area = sum(coverage_area)) %>%
-    mutate(proportion = total_area/sum(total_area)))
-  
-}
-
-#extract the area of each raster cell covered by the plot and summarize
-x <- exact_extract(lc_2016_reproj, parcels, coverage_area = TRUE, summarize_df = TRUE, fun = sum_cover)
-
-
-#add plot names to the elements of the output list
-names(x) <- parcels$PARCELID
-
-#merge the list elements into a df
-test <- bind_rows(x, .id = "Plot_buffer")
-
-
-
-library(terra)
-r <- rast(system.file("ex/elev.tif", package="terra"))
-r <- round(r/100)
-v <- vect(system.file("ex/lux.shp", package="terra"))
-
-
-lc_2016_reproj_test <- crop(lc_2016_reproj, parcels[1:2, ], mask=TRUE)
-
-freq(lc_2016_reproj_test)
-#  layer value count
-#1     1     2    47
-#2     1     3   219
-#3     1     4   314
-#4     1     5   475
-
-a <- cellSize(lc_2016_reproj)
-zonal(a, lc_2016_reproj)
-zonal(a, lc_2016_reproj)
-#  elevation     area
-#1         2 555404.2
-#2         3 555412.9
-#3         4 554315.4
-#4         5 553053.0
-
-
-
-}
-
-unique_values <- unique(parcels$PARCELID)
-number_of_unique_values <- length(unique_values)
-
-count(unique_values)
-
-
-
-extracted_values <- extract(landcover_raster, parcels, df = TRUE)
-
-# Combine the extracted data with the parcels data
-combined_data <- cbind(parcels, extracted_values)
-
-# Use table or aggregate to count the landcover types for each GlobalID
-landcover_counts <- aggregate(combined_data$layer, by = list(combined_data$GlobalID), FUN = function(x) table(factor(x, levels = unique(combined_data$layer))))
-
-# Now landcover_counts should have the counts of landcover types for each GlobalID.
-
-
-
-# Extract the raster values using the parcel polygons
-extracted_values <- extract(lc_2016_reproj, parcels, df = TRUE)
-
-# Combine the extracted data with the parcels data
-combined_data <- cbind(parcels, extracted_values)
-
-# Use table or aggregate to count the landcover types for each GlobalID
-landcover_counts <- aggregate(combined_data$layer, by = list(combined_data$GlobalID), FUN = function(x) table(factor(x, levels = unique(combined_data$layer))))
-
-# Now landcover_counts should have the counts of landcover types for each GlobalID.
-
-```
-
-```{r}
-
-library(raster)
-library(sf)
-library(exactextractr)
-
-
-
-# Use exact_extract to get the count of each landcover type within each parcel
-coverage_stats <- exactextractr::exact_extract(lc_2016_reproj, parcels, function(values, fraction) {
-  if (length(values) == 0) {
-    return(data.frame(count = 0, percentage = 0))
-  }
-  data.frame(table(factor(values, levels = unique(values))), fraction = fraction)
-})
-
-# Process the extracted data
-# The coverage_stats is a list with one element per feature in `parcels`
-# Each element is a data frame with the count of each raster value (landcover type) in the feature
-
-# Initialize an empty data frame to store the counts per GlobalID
-landcover_counts <- data.frame()
-
-# Loop through the list to populate the data frame
-for (i in seq_along(coverage_stats)) {
-  feature_stats <- coverage_stats[[i]]
-  global_id <- parcels$GlobalID[i]
-  
-  for (landcover_type in unique(landcover_raster[])) {
-    if (!landcover_type %in% feature_stats$values) {
-      feature_stats <- rbind(feature_stats, data.frame(values = landcover_type, count = 0, percentage = 0))
-    }
-  }
-  
-  # Add the GlobalID to the stats
-  feature_stats$GlobalID <- global_id
-  
-  # Combine with the main data frame
-  landcover_counts <- rbind(landcover_counts, feature_stats)
-}
-
-# Now, `landcover_counts` contains the count and percentage of each landcover type within each parcel
-
-ext <- raster::extract(lc_2016_reproj, parcels)
-
-tab <- sapply(ext, function(x) tabulate(x, 10))
-tab <- tab / colSums(tab)
-
-
-f <- freq(lc_2016_reproj, useNA='no')
-apc <- prod(res(lc_2016_reproj))
-f <- cbind(f, area=f[,2] * apc)
-f
-
-#     value count    area
-#[1,]     1    78  124800
-#[2,]     2  1750 2800000
-#[3,]     3   819 1310400
-#[4,]     4   304  486400
-#[5,]     5   152  243200
-
-a <- rasterToPolygons(aggregate(r, 25))
-
-# extract values (slow)
-ext <- extract(r2, a)
-
-# tabulate values for each polygon
-tab <- sapply(ext, function(x) tabulate(x, 5))
-# adjust for area (planar data only)
-tab <- tab * prod(res(r2))
-
-# check the results, by summing over the regions
-rowSums(tab)
-#[1]  124800 2800000 1310400  486400  243200 
-
-
-
-
-
-}
-
-# Calculate the coverage fraction and value of each landcover type for each polygon
-coverage_fraction <- exact_extract(lc_2016_reproj, parcels, progress = TRUE)
-
-# Process the extracted data to calculate the percentage of each landcover type
-percentages <- lapply(coverage_fraction, function(x) {
-  total_area <- sum(x$coverage_fraction) # Total covered area within the polygon
-  # Calculate the percentage of each landcover type
-  landcover_pct <- tapply(x$coverage_fraction, x$value, sum) / total_area * 100
-  return(landcover_pct)
-})
-percentages
-
-
-
-percentage_dfs <- lapply(coverage_fraction, function(x) {
-  total_area <- sum(x$coverage_fraction)
-  landcover_pct <- tapply(x$coverage_fraction, x$value, sum) / total_area * 100
-  return(as.data.frame(t(landcover_pct)))
-})
-
-# Combine all the data frames into a single data frame
-percentage_df <- do.call(rbind, percentage_dfs)
-
-# If you need to add an identifier for each row, use the following line
-percentage_df$GlobalID <- parcels$GlobalID
-
-# Convert wide format to long format if necessary
-percentage_long_df <- gather(percentage_df, key = "LandcoverType", value = "Percentage", -GlobalID)
-
-# To have each landcover type as a column and parcels as rows
-percentage_wide_df <- pivot_wider(percentage_long_df, names_from = LandcoverType, values_from = Percentage)
-
-# Now merge this with your original parcels data if you want to include other parcel attributes
-final_df <- left_join(parcels, percentage_wide_df, by = "GlobalID")
-
-# View the table
-View(final_df)
-
-write.csv(final_df, "final_df.csv", row.names = FALSE)
-
-
-terra::extract(lc_2016_reproj, parcels, exact = TRUE, mean = table)
-```
-```{r}
-
-crs_raster <- crs(lc_2016)
-crs_vector <- st_crs(parcels)
-
-parcel_polygons <- st_transform(parcels, crs = crs_raster)
-
-#Extract the unique values (land cover types) from the raster:
-landcover_types <- unique(values(lc_2016))
-
-#Create a function to calculate the percentage of each land cover type within each parcel polygon
-
-library(raster)
-library(sf)
-
-
-# Ensure that the raster and vector data have the same CRS
-parcel_polygons <- st_transform(parcel_polygons, crs = crs(lc_2016))
-
-landcover_types <- unique(values(lc_2016))
-
-calculate_landcover_percentages <- function(parcel_polygon) {
-  parcel_area <- st_area(parcel_polygon)
-  raster_extent <- extent(lc_2016)
-  
-  landcover_counts <- numeric(length(landcover_types))
-  names(landcover_counts) <- landcover_types
-  
-  for (x in seq(raster_extent@xmin, raster_extent@xmax, by = res(lc_2016)[1])) {
-    for (y in seq(raster_extent@ymin, raster_extent@ymax, by = res(lc_2016)[2])) {
-      point <- st_point(c(x, y))
-      if (st_intersects(point, parcel_polygon, sparse = FALSE)) {
-        raster_value <- extract(lc_2016, point)
-        landcover_counts[as.character(raster_value)] <- landcover_counts[as.character(raster_value)] + 1
-      }
-    }
-  }
-  
-  landcover_percentages <- landcover_counts / parcel_area * 100
-  landcover_percentages[is.na(landcover_percentages)] <- 0
-  return(landcover_percentages)
-}
-
-landcover_percentages <- lapply(st_geometry(parcel_polygons), calculate_landcover_percentages)
-landcover_percentages_df <- data.frame(
-  objectid = parcel_polygons$objectid,
-  geospatial_info = st_as_text(parcel_polygons$geometry),
-  landcover_percentages
-)
-
-```
-
-```{r LC_2016_PER}
-options(scipen = 999, digits = 2)
-
-library(sf)
-library(raster)
-library(exactextractr)
-library(dplyr)
-library(tidyr)
 
 parcels <- parcels
 landcover_2016 <- lc_2016
 
-# Transform CRS of parcels to match the landcover raster if they are different
-if (st_crs(parcels) != crs(landcover_2016)) {
-  parcels <- st_transform(parcels, crs = crs(landcover_2016))
-}
-
-# Perform the exact extraction
-coverage <- exact_extract(landcover_2016, parcels, include_cols = c("OBJECTID"))
-# Function to calculate percentages
-calculate_percentages <- function(df) {
-  total_area <- sum(df$coverage_fraction)
-  percentages <- 100 * df$coverage_fraction / total_area
-  return(percentages)
-}
-
-# Calculate percentages and bind them to a new data frame
-parcel_percentages <- do.call(rbind, lapply(coverage, function(x) {
-  percentages <- calculate_percentages(x)
-  x$percentage <- percentages
-  return(x)
-}))
-
-# Spread the data to wide format
-parcel_percentages_wide <- parcel_percentages %>%
-  group_by(OBJECTID, value) %>%
-  summarize(percentage = sum(percentage, na.rm = TRUE)) %>%
-  ungroup() %>%
-  pivot_wider(names_from = value, values_from = percentage, names_prefix = "Landcover_")
-
-# Merge with original parcels data to include geospatial information
-final_dataset <- parcels %>%
-  left_join(parcel_percentages_wide, by = "OBJECTID")
-
-
-# View the final dataset
-View(final_dataset)
-
-# Alternatively, write to a CSV file
-write.csv(final_dataset, "parcel_landcover_percentages.csv", row.names = FALSE)
-
-
-
-```
-
-
-```{r LC_2021_PER}
-
-library(sf)
-library(raster)
-library(exactextractr)
-library(dplyr)
-library(tidyr)
-
-parcels <- parcels
-landcover_2021 <- lc_2021
-
-# Transform CRS of parcels to match the landcover raster if they are different
-if (st_crs(parcels) != crs(landcover_2021)) {
-  parcels <- st_transform(parcels, crs = crs(landcover_2021))
-}
-
-# Perform the exact extraction
-coverage <- exact_extract(landcover_2021, parcels, include_cols = c("GlobalID"))
-parcel_percentages <- do.call(rbind, lapply(coverage, function(x) {
-  percentages <- calculate_percentages(x)
-  x$percentage <- percentages
-  return(x)
-}))
-
-# Spread the data to wide format and summarize
-parcel_percentages_wide <- parcel_percentages %>%
-  group_by(GlobalID, value) %>%
-  summarize(percentage = sum(percentage, na.rm = TRUE), .groups = 'drop') %>%
-  pivot_wider(names_from = value, values_from = percentage, names_prefix = "Landcover_")
-
-# Merge with original parcels data to include geospatial information
-final_dataset <- parcels %>%
-  left_join(parcel_percentages_wide, by = "GlobalID")
-
-# Select the desired columns and turn NA's to 0 for landcover columns
-parcel_lc_2021 <- final_dataset %>%
-  select(GlobalID, starts_with("Landcover_"), geometry) %>%
-  mutate(across(starts_with("Landcover_"), ~replace_na(., 0)))
-
-#TURN NA'S TO 0
-
-
-#FILTER COLUMNS
-
-
-# View the final dataset
-View(parcel_lc_2021 )
-
-# Alternatively, write to a CSV file
-write.csv(final_dataset, "parcel_landcover_percentages.csv", row.names = FALSE)
-
-
-```
-
-
-
-
-
-## Final Code
-```{r}
-
-library(sf)
-library(raster)
-library(exactextractr)
-library(dplyr)
-library(tidyr)
-
-parcels <- parcels
-landcover_2016 <- lc_2016
-# Assuming you have already loaded necessary libraries and defined parcels and landcover_2021
 
 # Transform CRS of parcels to match the landcover raster if they are different
 if (st_crs(parcels) != crs(landcover_2016)) {
@@ -987,22 +519,58 @@ parcel_lc_2016 <- final_dataset %>%
   select(GlobalID, starts_with("Landcover_"), geometry) %>%
   mutate(across(starts_with("Landcover_"), ~replace_na(round(., 2), 0)))  # Ensure rounding here just in case and replace NA with 0
 
+# Define a mapping between landcover codes and descriptions
+landcover_mapping <- c("Landcover_11" = "Open Water",
+                       "Landcover_12" = "Perennial Ice/Snow",
+                       "Landcover_21" = "Developed, Open Space",
+                       "Landcover_22" = "Developed, Low Intensity",
+                       "Landcover_23" = "Developed, Medium Intensity",
+                       "Landcover_24" = "Developed High Intensity",
+                       "Landcover_31" = "Barren Land (Rock/Sand/Clay)",
+                       "Landcover_41" = "Deciduous Forest",
+                       "Landcover_42" = "Evergreen Forest",
+                       "Landcover_43" = "Mixed Forest",
+                       "Landcover_51" = "Dwarf Scrub",
+                       "Landcover_52" = "Shrub/Scrub",
+                       "Landcover_71" = "Grassland/Herbaceous",
+                       "Landcover_72" = "Sedge/Herbaceous",
+                       "Landcover_73" = "Lichens",
+                       "v74" = "Moss",
+                       "Landcover_81" = "Pasture/Hay",
+                       "Landcover_82" = "Cultivated Crops",
+                       "Landcover_90" = "Woody Wetlands",
+                       "Landcover_95" = "Emergent Herbaceous Wetlands")
+
+parcel_lc_2016 <- parcel_lc_2016 %>%
+  rename("Open Water" = "Landcover_11",
+  "Developed, Open Space" = "Landcover_21",
+  "Developed, Low Intensity" = "Landcover_22",
+  "Developed, Medium Intensity" = "Landcover_23",
+  "Developed High Intensity" = "Landcover_24",
+  "Barren Land (Rock/Sand/Clay)" = "Landcover_31",
+  "Deciduous Forest" = "Landcover_41",
+  "Evergreen Forest" = "Landcover_42",
+  "Mixed Forest" = "Landcover_43",
+  "Shrub/Scrub" = "Landcover_52",
+  "Grassland/Herbaceous" = "Landcover_71",
+  "Pasture/Hay" = "Landcover_81",
+  "Cultivated Crops" = "Landcover_82",
+  "Woody Wetlands" = "Landcover_90",
+  "Emergent Herbaceous Wetlands" = "Landcover_95"
+)
+
 # View the final dataset
 View(parcel_lc_2016)
 
-
+write.csv(parcel_lc_2016, "parcel_landcover_percentages_2016.csv", row.names = FALSE)
 
 ```
 
 ```{r}
-library(sf)
-library(raster)
-library(exactextractr)
-library(dplyr)
-library(tidyr)
+
 parcels <- parcels
 landcover_2021 <- lc_2021
-# Assuming you have already loaded necessary libraries and defined parcels and landcover_2021
+
 
 # Transform CRS of parcels to match the landcover raster if they are different
 if (st_crs(parcels) != crs(landcover_2021)) {
@@ -1042,9 +610,28 @@ parcel_lc_2021 <- final_dataset %>%
   select(GlobalID, starts_with("Landcover_"), geometry) %>%
   mutate(across(starts_with("Landcover_"), ~replace_na(round(., 2), 0)))  # Ensure rounding here just in case and replace NA with 0
 
+
+parcel_lc_2021 <- parcel_lc_2021 %>%
+  rename("Open Water" = "Landcover_11",
+  "Developed, Open Space" = "Landcover_21",
+  "Developed, Low Intensity" = "Landcover_22",
+  "Developed, Medium Intensity" = "Landcover_23",
+  "Developed High Intensity" = "Landcover_24",
+  "Barren Land (Rock/Sand/Clay)" = "Landcover_31",
+  "Deciduous Forest" = "Landcover_41",
+  "Evergreen Forest" = "Landcover_42",
+  "Mixed Forest" = "Landcover_43",
+  "Shrub/Scrub" = "Landcover_52",
+  "Grassland/Herbaceous" = "Landcover_71",
+  "Pasture/Hay" = "Landcover_81",
+  "Cultivated Crops" = "Landcover_82",
+  "Woody Wetlands" = "Landcover_90",
+  "Emergent Herbaceous Wetlands" = "Landcover_95"
+)
+
 # View the final dataset
 View(parcel_lc_2021)
 
-
+write.csv(parcel_lc_2021, "parcel_landcover_percentages_2021.csv", row.names = FALSE)
 
 ```
