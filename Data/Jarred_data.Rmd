@@ -4,9 +4,15 @@ author: "Jarred_Randall"
 date: "2024-02-12"
 output: html_document
 ---
+```{r clear_environment, cache=TRUE, include=F}
+
+rm(list=ls())
+
+```
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
 ```
 
 ```{r Library}
@@ -21,20 +27,16 @@ library(tidyverse)
 library(tidycensus)
 library(sf)
 library(dplyr)
-library(raster) 
-library(rgdal)
 library(animation)
-library(rasterVis)
 library(RColorBrewer) 
 library(ggplot2)      
 library(colorspace)
-library(dplyr)
 library(tidyr)
 library(readr)
-library(sf)
 library(terra)
 library(kableExtra)
-
+library(exactextractr)
+options(scipen = 999, digits = 2)
 
 
 color_palette <- c("#e2a334", "#f9bf3e", "#fcd977", "#9ad7d2", "#74c1b9")
@@ -196,6 +198,8 @@ municipal_bound <- st_read("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Wa
 
 county_bound <- st_read("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/GeoJSON/NCDOT_County_Boundaries.geojson")
 
+parcels <- st_read("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/parcel/parcel.geojson")
+
 # Landcover Vector
 
 legend<-pal_nlcd()
@@ -220,6 +224,7 @@ ggplot() +
   theme_void() +
   theme(legend.position = "right")
 ```
+
 ```{r}
 
 ggplot() +
@@ -246,6 +251,15 @@ s <- stack(lc_2011, lc_2013, lc_2016,lc_2019, lc_2021 )
 vals <-unique(s[[5]])  # Get unique values from lc_2021
 df <- legend[legend$ID %in% vals,]  # Filter legend information based on lc_2021 values
 rat5 <- ratify(lc_2021)
+
+myKey <- list(
+  rectangles = list(col = df$Color),
+  text = list(lab = df$Class),
+  space = 'right',
+  columns = 1,
+  size = 2,
+  cex = .6
+)
 
 levelplot(rat5, att='ID', 
           col.regions=df$Color,
@@ -456,5 +470,168 @@ kable(d[,c(2,10,13,14)])  %>%
   kable_styling(bootstrap_options = c("striped", "hover"), full_width = F)
 
 
+
+```
+
+
+## Final Code for landcover percentages per parcel
+```{r}
+
+parcels <- parcels
+landcover_2016 <- lc_2016
+
+
+# Transform CRS of parcels to match the landcover raster if they are different
+if (st_crs(parcels) != crs(landcover_2016)) {
+  parcels <- st_transform(parcels, crs = crs(landcover_2016))
+}
+
+# Perform the exact extraction
+coverage <- exact_extract(landcover_2016, parcels, include_cols = c("GlobalID"))
+
+# Function to calculate and round percentages
+calculate_percentages <- function(df) {
+  total_area <- sum(df$coverage_fraction)
+  percentages <- 100 * df$coverage_fraction / total_area
+  percentages_rounded <- round(percentages, 2)  # Round percentages to 2 decimal places
+  return(percentages_rounded)
+}
+
+# Apply calculate_percentages and bind results to a new data frame
+parcel_percentages <- do.call(rbind, lapply(coverage, function(x) {
+  percentages <- calculate_percentages(x)
+  x$percentage <- percentages  # Assign rounded percentages
+  return(x)
+}))
+
+# Spread the data to wide format and summarize
+parcel_percentages_wide <- parcel_percentages %>%
+  group_by(GlobalID, value) %>%
+  summarize(percentage = sum(percentage, na.rm = TRUE), .groups = 'drop') %>%
+  pivot_wider(names_from = value, values_from = percentage, names_prefix = "Landcover_")
+
+# Merge with original parcels data to include geospatial information
+final_dataset <- parcels %>%
+  left_join(parcel_percentages_wide, by = "GlobalID")
+
+# Select the desired columns and turn NA's to 0 for landcover columns
+parcel_lc_2016 <- final_dataset %>%
+  select(GlobalID, starts_with("Landcover_"), geometry) %>%
+  mutate(across(starts_with("Landcover_"), ~replace_na(round(., 2), 0)))  # Ensure rounding here just in case and replace NA with 0
+
+# Define a mapping between landcover codes and descriptions
+landcover_mapping <- c("Landcover_11" = "Open Water",
+                       "Landcover_12" = "Perennial Ice/Snow",
+                       "Landcover_21" = "Developed, Open Space",
+                       "Landcover_22" = "Developed, Low Intensity",
+                       "Landcover_23" = "Developed, Medium Intensity",
+                       "Landcover_24" = "Developed High Intensity",
+                       "Landcover_31" = "Barren Land (Rock/Sand/Clay)",
+                       "Landcover_41" = "Deciduous Forest",
+                       "Landcover_42" = "Evergreen Forest",
+                       "Landcover_43" = "Mixed Forest",
+                       "Landcover_51" = "Dwarf Scrub",
+                       "Landcover_52" = "Shrub/Scrub",
+                       "Landcover_71" = "Grassland/Herbaceous",
+                       "Landcover_72" = "Sedge/Herbaceous",
+                       "Landcover_73" = "Lichens",
+                       "v74" = "Moss",
+                       "Landcover_81" = "Pasture/Hay",
+                       "Landcover_82" = "Cultivated Crops",
+                       "Landcover_90" = "Woody Wetlands",
+                       "Landcover_95" = "Emergent Herbaceous Wetlands")
+
+parcel_lc_2016 <- parcel_lc_2016 %>%
+  rename("Open Water" = "Landcover_11",
+  "Developed, Open Space" = "Landcover_21",
+  "Developed, Low Intensity" = "Landcover_22",
+  "Developed, Medium Intensity" = "Landcover_23",
+  "Developed High Intensity" = "Landcover_24",
+  "Barren Land (Rock/Sand/Clay)" = "Landcover_31",
+  "Deciduous Forest" = "Landcover_41",
+  "Evergreen Forest" = "Landcover_42",
+  "Mixed Forest" = "Landcover_43",
+  "Shrub/Scrub" = "Landcover_52",
+  "Grassland/Herbaceous" = "Landcover_71",
+  "Pasture/Hay" = "Landcover_81",
+  "Cultivated Crops" = "Landcover_82",
+  "Woody Wetlands" = "Landcover_90",
+  "Emergent Herbaceous Wetlands" = "Landcover_95"
+)
+
+# View the final dataset
+View(parcel_lc_2016)
+
+write.csv(parcel_lc_2016, "parcel_landcover_percentages_2016.csv", row.names = FALSE)
+
+```
+
+```{r}
+
+parcels <- parcels
+landcover_2021 <- lc_2021
+
+
+# Transform CRS of parcels to match the landcover raster if they are different
+if (st_crs(parcels) != crs(landcover_2021)) {
+  parcels <- st_transform(parcels, crs = crs(landcover_2021))
+}
+
+# Perform the exact extraction
+coverage <- exact_extract(landcover_2021, parcels, include_cols = c("GlobalID"))
+
+# Function to calculate and round percentages
+calculate_percentages <- function(df) {
+  total_area <- sum(df$coverage_fraction)
+  percentages <- 100 * df$coverage_fraction / total_area
+  percentages_rounded <- round(percentages, 2)  # Round percentages to 2 decimal places
+  return(percentages_rounded)
+}
+
+# Apply calculate_percentages and bind results to a new data frame
+parcel_percentages <- do.call(rbind, lapply(coverage, function(x) {
+  percentages <- calculate_percentages(x)
+  x$percentage <- percentages  # Assign rounded percentages
+  return(x)
+}))
+
+# Spread the data to wide format and summarize
+parcel_percentages_wide <- parcel_percentages %>%
+  group_by(GlobalID, value) %>%
+  summarize(percentage = sum(percentage, na.rm = TRUE), .groups = 'drop') %>%
+  pivot_wider(names_from = value, values_from = percentage, names_prefix = "Landcover_")
+
+# Merge with original parcels data to include geospatial information
+final_dataset <- parcels %>%
+  left_join(parcel_percentages_wide, by = "GlobalID")
+
+# Select the desired columns and turn NA's to 0 for landcover columns
+parcel_lc_2021 <- final_dataset %>%
+  select(GlobalID, starts_with("Landcover_"), geometry) %>%
+  mutate(across(starts_with("Landcover_"), ~replace_na(round(., 2), 0)))  # Ensure rounding here just in case and replace NA with 0
+
+
+parcel_lc_2021 <- parcel_lc_2021 %>%
+  rename("Open Water" = "Landcover_11",
+  "Developed, Open Space" = "Landcover_21",
+  "Developed, Low Intensity" = "Landcover_22",
+  "Developed, Medium Intensity" = "Landcover_23",
+  "Developed High Intensity" = "Landcover_24",
+  "Barren Land (Rock/Sand/Clay)" = "Landcover_31",
+  "Deciduous Forest" = "Landcover_41",
+  "Evergreen Forest" = "Landcover_42",
+  "Mixed Forest" = "Landcover_43",
+  "Shrub/Scrub" = "Landcover_52",
+  "Grassland/Herbaceous" = "Landcover_71",
+  "Pasture/Hay" = "Landcover_81",
+  "Cultivated Crops" = "Landcover_82",
+  "Woody Wetlands" = "Landcover_90",
+  "Emergent Herbaceous Wetlands" = "Landcover_95"
+)
+
+# View the final dataset
+View(parcel_lc_2021)
+
+write.csv(parcel_lc_2021, "parcel_landcover_percentages_2021.csv", row.names = FALSE)
 
 ```
