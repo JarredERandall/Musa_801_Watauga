@@ -474,8 +474,21 @@ kable(d[,c(2,10,13,14)])  %>%
 ```
 
 
-## Final Code for landcover percentages per parcel
+
+
+
+
+
+###Final Code for landcover percentages per parcel
 ```{r}
+
+
+lc_2021 <- raster("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/Landuse_Raster/lulc_2021")
+lc_2019 <- raster("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/Landuse_Raster/lulc_2019")
+lc_2016 <- raster("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/Landuse_Raster/lulc_2016")
+lc_2013 <- raster("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/Landuse_Raster/lulc_2013")
+lc_2011 <- raster("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/Landuse_Raster/lulc_2011")
+
 
 parcels <- parcels
 landcover_2016 <- lc_2016
