@@ -1,0 +1,58 @@
+---
+title: "Resample"
+author: "Yinan_Li"
+date: "2024-03-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Library, echo=FALSE, message=FALSE, warning=FALSE}
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(FNN)
+```
+
+```{r data_loading, echo=FALSE, message=FALSE, warning=FALSE} 
+df <- read.csv("E:/UPenn/24Spring/MUSA_Practicum/Resample/model17.csv")
+```
+
+```{r reclassify_permit, echo=FALSE}
+# if 'n_permit_22>=1, assign 1 to a new column 'permit_22', otherwise assign 0
+df$permit_22 <- ifelse(df$n_permit_22>=1, 1, 0)
+```
+
+```{r data_summary, echo=FALSE}
+# count the number of column 'permit_22' 0 and 1
+df %>% count(permit_22)
+```
+
+```{r resample_1, echo=FALSE}
+# over-sample 1 in the dataset to be more balanced with 10% are 1 (around 4700) and 90% are 0
+# Install and load necessary packages
+install.packages("ROSE")
+library(ROSE)
+
+# Assuming your dataset is named 'df' and the column is 'permit_22'
+# Convert the permit_22 column to a factor
+df$permit_22 <- as.factor(df$permit_22)
+
+# Check the class distribution before SMOTE
+table(df$permit_22)
+```
+
+```{r SMOTE, echo=FALSE}
+# Apply oversampling to balance the dataset
+oversampled_df <- ovun.sample(permit_22 ~ ., data = df, method = "over", p = 0.1, seed = 42)$data
+
+# Check the class distribution after oversampling
+table(oversampled_df$permit_22)
+```
+
+```{r output, echo=FALSE}
+write.csv(oversampled_df, "E:/UPenn/24Spring/MUSA_Practicum/Resample/model17_resample.csv", row.names = FALSE)
+```
+
