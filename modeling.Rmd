@@ -456,7 +456,7 @@ summary(logistic_model)
 test_predictions <- predict(logistic_model, newdata = test_data, type = "response")
 
 # Convert probabilities to binary predictions (0 or 1) using a threshold of 0.5
-binary_predictions <- ifelse(test_predictions >= 0.16, 1, 0)
+binary_predictions <- ifelse(test_predictions >= 0.14, 1, 0)
 
 # Calculate accuracy
 accuracy <- mean(binary_predictions == test_data$permit_22)
