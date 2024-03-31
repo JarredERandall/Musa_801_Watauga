@@ -5,25 +5,474 @@ date: "2024-03-25"
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE,  message = FALSE, warning = FALSE)
+
+library(tidyverse)
+library(sf)
+library(RSocrata)
+library(viridis)
+library(spatstat)
+library(raster)
+library(spdep)
+library(FNN)
+library(grid)
+library(gridExtra)
+library(knitr)
+library(kableExtra)
+library(tidycensus)
+library(classInt)   # for KDE and ML risk class intervals
+library(mapview)
+# functions
+root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/"
+source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
 ```
 
-## R Markdown
+## Loading Data
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+```{r}
+parcel = st_read('https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Data/natural/parcel.geojson')
+```
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
 
 ```{r cars}
-summary(cars)
+natural <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Data/natural/natural_model.geojson")
+```
+```{r}
+inflation <- st_read('https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Data/parcel_w_inflation.csv')
+natural_dummy<- st_read('https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Data/parcels_natural.csv')
 ```
 
-## Including Plots
+```{r}
+inflation <- inflation%>%dplyr::select('inflation17')
+natural_dummy<- natural_dummy%>%dplyr::select('natural')
 
-You can also embed plots, for example:
+```
+
+
+```{r}
+natural[is.na(natural)] <- 0
+natural <- st_drop_geometry(natural)
+
+```
+
+```{r}
+spatiallag <- st_read("D:/Upenn/2024 Spring/MUSA Practicum/Musa_801_Watauga/Data/PERMIT_SPATIAL_LAG/parcel_spatial_lag.csv")
+```
+
+```{r}
+landcover_2016 <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Data/parcel_landcover_percentages_2016.csv")
+landcover_2021 <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Data/parcel_landcover_percentages_2021.csv")
+```
+
+### Loading Permission
+```{r}
+permit_17 <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/GeoJSON/clipped_permit17.geojson")
+permit_22 <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/GeoJSON/clipped_permit22.geojson")
+```
+```{r}
+permit_17 <- st_transform(permit_17, st_crs(parcel))
+permit_22 <- st_transform(permit_22, st_crs(parcel))
+```
+
+```{r}
+permit_17$permit <- 1
+permit_17 <- dplyr::select(permit_17, permit, geometry)
+```
+
+
+## Combining Data
 
 ```{r pressure, echo=FALSE}
-plot(pressure)
+final <- cbind(parcel, natural,spatiallag,landcover_2016, natural_dummy, inflation)
+final_2017 <- st_join(permit_17, parcel)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r}
+final_2017 <- dplyr::select(final_2017, permit,GlobalID)
+final_2017 <- st_drop_geometry(final_2017)
+combined_data <- merge(final_2017, final, by = "GlobalID", all.x = TRUE, all.y = TRUE)
+```
+
+```{r}
+combined_data$permit <- ifelse(is.na(combined_data$permit), 0, combined_data$permit)
+```
+
+```{r}
+colnames(combined_data)
+```
+
+```{r}
+model17 <- dplyr::select(combined_data, "GlobalID","Slope_Ave","Slope_Max","Soil_A", "Soil_B","Soil_B.C","Soil_C" ,"Soil_Unknown","n_permit_22", "permit_17.nn_3" ,"permit_17.nn_4" ,"permit_17.nn_5","Developed_Open_Space"   ,      "Deciduous_Forest",
+"Mixed_Forest",  "Developed_Low_Intensity"  ,   
+"Pasture_Hay" ,                 "Developed_Medium_Intensity"  ,
+"Developed_High_Intensity"  ,   "Woody_Wetlands"              
+, "Grassland_Herbaceous"    ,     "Evergreen_Forest"            
+,"Shrub_Scrub"     ,             "Emergent_Herbaceous_Wetlands"
+,"Landcover_NaN"    ,            "Open_Water"                  
+,"Barren_Land"         ,         "Cultivated_Crops" ,"natural"   ,                   "inflation17")
+```
+
+```{r}
+model17 <- na.omit(model17)
+model17 <- unique(model17)
+```
+
+```{r}
+model17 <- st_read("model17.csv")
+```
+
+```{r}
+write.csv(model17, file = "model17.csv", row.names = FALSE)
+```
+## Modeling
+```{r}
+model17[] <- sapply(model17, as.numeric)
+```
+
+
+```{r}
+# Load the dplyr package
+library(dplyr)
+
+# Assuming sampled_data is your DataFrame containing the sampled data
+
+# Sample data
+sampled_data <- model17%>%dplyr::select(-GlobalID)
+
+sampled_data <- na.omit(sampled_data)
+sampled_data[] <- sapply(sampled_data, as.numeric)
+```
+
+```{r}
+# Modify the permit_22 column
+sampled_data$permit_22 <- ifelse(sampled_data$n_permit_22 >= 1, 1, sampled_data$n_permit_22)
+
+# Drop the n_permit_22 column
+sampled_data <- sampled_data %>%
+  dplyr::select(-n_permit_22)
+```
+
+
+
+```{r}
+logistic_model <- glm(permit_22 ~ ., data = sampled_data, family = binomial)
+
+# Print summary of the model
+summary(logistic_model)
+```
+```{r}
+linear <- model17%>%dplyr::select(-GlobalID)
+```
+
+
+```{r}
+linear_model <- lm(n_permit_22 ~ ., data = linear)
+
+# Print summary of the model
+summary(linear_model)
+```
+
+
+# Start Modeling
+
+## 1. Loading Data
+```{r}
+features <-st_read('D:/Upenn/2024 Spring/MUSA Practicum/Musa_801_Watauga/Resample/model17_resample.csv')
+```
+```{r}
+filtered <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Resample/final_slope_filtered_no_geom.csv")
+```
+
+
+
+## 2. Try with the resampled dataset
+
+```{r}
+sample <- semi_join(features, filtered, by = "GlobalID")
+#sample <- distinct(sample)
+```
+
+
+```{r}
+resample <- sample%>%dplyr::select(-GlobalID, -n_permit_22)
+resample[] <- sapply(resample, as.numeric)
+```
+
+```{r}
+# Delete the NA features here
+#resample <- replace(resample, is.na(resample), 0)
+
+resample <- na.omit(resample)
+```
+
+
+### Write the csv
+```{r output, echo=FALSE}
+write.csv(sample, "D:/Upenn/2024 Spring/MUSA Practicum/Musa_801_Watauga/Resample/final_modeling.csv", row.names = FALSE)
+```
+
+```{r output, echo=FALSE}
+write.csv(resample, "D:/Upenn/2024 Spring/MUSA Practicum/Musa_801_Watauga/Resample/final_modeling_noID.csv", row.names = FALSE)
+```
+
+# 3. Start with Logistic Modeling
+```{r Logistic Modeling}
+# Set the seed for reproducibility
+set.seed(123)
+
+
+# Split the data into training and testing sets
+train_indices <- sample(1:nrow(resample), 0.8 * nrow(resample))
+train_data <- resample[train_indices, ]
+test_data <- resample[-train_indices, ]
+
+# Convert permit_22 to a factor variable
+train_data$permit_22 <- factor(train_data$permit_22)
+test_data$permit_22 <- factor(test_data$permit_22)
+
+# Train the logistic regression model
+logistic_model <- glm(permit_22 ~ ., data = train_data, family="binomial" (link="logit"))
+
+# Print summary of the model
+summary(logistic_model)
+```
+```{r make predictions}
+test_predictions <- predict(logistic_model, newdata = test_data, type = "response")
+
+# Convert probabilities to binary predictions (0 or 1) using a threshold of 0.5
+binary_predictions <- ifelse(test_predictions >= 0.5, 1, 0)
+
+# Calculate accuracy
+accuracy <- mean(binary_predictions == test_data$permit_22)
+cat("Accuracy of the logistic regression model on the test data:", accuracy)
+```
+```{r get the sensitivity}
+# Calculate confusion matrix
+conf_matrix <- table(test_data$permit_22, binary_predictions)
+
+# Calculate precision, recall, and F1 score
+precision <- ifelse(sum(conf_matrix[, 2]) == 0, 0, conf_matrix[2, 2] / sum(conf_matrix[, 2]))
+recall <- ifelse(sum(conf_matrix[2, ]) == 0, 0, conf_matrix[2, 2] / sum(conf_matrix[2, ]))
+f1_score <- ifelse(precision + recall == 0, 0, 2 * precision * recall / (precision + recall))
+
+# Print F1 score
+cat("F1 score of the logistic regression model on the test data:", f1_score)
+```
+
+#### Try to get the best threshold
+```{r}
+testProbs <- data.frame(Outcome = as.factor(test_data$permit_22),
+                        Probs = test_predictions)
+head(testProbs)
+```
+
+```{r}
+testProbs <- 
+  testProbs %>%
+  mutate(predOutcome  = as.factor(ifelse(testProbs$Probs > 0.5 , 1, 0)))
+
+head(testProbs)
+```
+```{r}
+caret::confusionMatrix(testProbs$predOutcome, testProbs$Outcome, 
+                       positive = "1")
+```
+```{r}
+library(plotROC)
+
+ggplot(testProbs, aes(d = as.numeric(testProbs$Outcome), m = Probs)) +
+  geom_roc(n.cuts = 50, labels = FALSE, colour = "#FE9900") +
+  style_roc(theme = theme_grey) +
+  geom_abline(slope = 1, intercept = 0, size = 1.5, color = 'grey') +
+  labs(title = "ROC Curve - churnModel")
+```
+```{r}
+cost_benefit_table <-
+   testProbs %>%
+      count(predOutcome, Outcome) %>%
+      summarize(True_Negative = sum(n[predOutcome==0 & Outcome==0]),
+                True_Positive = sum(n[predOutcome==1 & Outcome==1]),
+                False_Negative = sum(n[predOutcome==0 & Outcome==1]),
+                False_Positive = sum(n[predOutcome==1 & Outcome==0])) %>%
+       gather(Variable, Count) %>%
+    bind_cols(data.frame(Description = c(
+              "We predicted no churn and did not send a mailer",
+              "We predicted churn and sent the mailer",
+              "We predicted no churn and the customer churned",
+              "We predicted churn and the customer did not churn")))
+```
+
+The logistic regression does not work well for the dataset since there is no true positive for it, which is bad for it.
+
+
+Then try to improve the threshold
+```{r}
+whichThreshold <- 
+  iterateThresholds(
+     data=testProbs, observedClass = Outcome, predictedProbs = Probs)
+
+whichThreshold[1:5,]
+```
+
+
+```{r}
+# Load the ggplot2 package
+library(ggplot2)
+
+ggplot(whichThreshold, aes(x = Rate_TP, y = Accuracy)) +
+  geom_point() +
+  geom_line() +
+  labs(x = "Rate_TP", y = "Accuracy", title = "Relationship between RateTP and Accuracy")
+
+```
+Try when Rate_TP = 0.5, threshold = 0.12
+
+```{r}
+test_predictions <- predict(logistic_model, newdata = test_data, type = "response")
+
+# Convert probabilities to binary predictions (0 or 1) using a threshold of 0.5
+binary_predictions <- ifelse(test_predictions >= 0.16, 1, 0)
+
+# Calculate accuracy
+accuracy <- mean(binary_predictions == test_data$permit_22)
+cat("Accuracy of the logistic regression model on the test data:", accuracy)
+```
+
+```{r}
+# Calculate confusion matrix
+conf_matrix <- table(test_data$permit_22, binary_predictions)
+
+# Calculate precision, recall, and F1 score
+precision <- ifelse(sum(conf_matrix[, 2]) == 0, 0, conf_matrix[2, 2] / sum(conf_matrix[, 2]))
+recall <- ifelse(sum(conf_matrix[2, ]) == 0, 0, conf_matrix[2, 2] / sum(conf_matrix[2, ]))
+f1_score <- ifelse(precision + recall == 0, 0, 2 * precision * recall / (precision + recall))
+
+# Print F1 score
+cat("F1 score of the logistic regression model on the test data:", f1_score)
+```
+
+# 4. Then tried random forest model
+```{r try without hyper}
+# Load the randomForest package
+library(randomForest)
+# Set seed for reproducibility
+
+# Train the Random Forest model
+rf_model <- randomForest(permit_22 ~ ., data = train_data)
+
+# Make predictions on the test data
+rf_predictions <- predict(rf_model, newdata = test_data)
+
+# Calculate accuracy
+accuracy <- mean(rf_predictions == test_data$permit_22)
+cat("Accuracy of the Random Forest model on the test data:", accuracy)
+
+```
+
+
+```{r}
+library(randomForest)
+# Convert permit_22 to a factor variable
+train_data$permit_22 <- factor(train_data$permit_22)
+test_data$permit_22 <- factor(test_data$permit_22)
+
+# Load the required library
+library(caret)
+
+# Train the Random Forest model with tuned hyperparameters
+rf_model <- randomForest(permit_22 ~ ., data = train_data,
+                         ntree = 500, mtry = sqrt(ncol(train_data)))
+
+# Make predictions on the test data
+rf_predictions_prob <- predict(rf_model, newdata = test_data, type = "prob")
+
+
+```
+
+
+```{r}
+# Convert predicted probabilities to class predictions
+rf_predictions <- ifelse(rf_predictions_prob[, "1"] >= 0.5, 1, 0)
+
+# Calculate accuracy
+accuracy <- mean(rf_predictions == test_data$permit_22)
+
+# Print the accuracy
+cat("Accuracy of the Random Forest model on the test data:", accuracy)
+
+```
+
+
+
+```{r}
+# Calculate confusion matrix
+conf_matrix <- table(test_data$permit_22, rf_predictions )
+
+# Calculate precision, recall, and F1 score
+precision <- ifelse(sum(conf_matrix[, 2]) == 0, 0, conf_matrix[2, 2] / sum(conf_matrix[, 2]))
+recall <- ifelse(sum(conf_matrix[2, ]) == 0, 0, conf_matrix[2, 2] / sum(conf_matrix[2, ]))
+f1_score <- ifelse(precision + recall == 0, 0, 2 * precision * recall / (precision + recall))
+
+# Print F1 score
+cat("F1 score of the Random Forest model on the test data:", f1_score)
+
+```
+This model seems to be overfit.
+
+# 5. Refine the model and delete the unnecessary features
+```{r Refine the dataset}
+cleand_features <- resample%>%dplyr::select(-'Soil_A',
+-'Soil_B',
+-'Soil_B.C',
+-'Soil_C',
+-'Soil_Unknown',
+-'permit_17.nn_4',
+-'Woody_Wetlands',
+-'Open_Water',
+-'Cultivated_Crops',
+-'natural'
+)
+```
+
+```{r}
+# Split the data into training and testing sets
+train_indices <- sample(1:nrow(cleand_features), 0.8 * nrow(cleand_features))
+train_data <- cleand_features[train_indices, ]
+test_data <- cleand_features[-train_indices, ]
+
+# Convert permit_22 to a factor variable
+train_data$permit_22 <- factor(train_data$permit_22)
+test_data$permit_22 <- factor(test_data$permit_22)
+
+# Train the logistic regression model
+logistic_model <- glm(permit_22 ~ ., data = train_data, family="binomial" (link="logit"))
+
+# Print summary of the model
+summary(logistic_model)
+```
+
+
+```{r make predictions}
+test_predictions <- predict(logistic_model, newdata = test_data, type = "response")
+
+# Convert probabilities to binary predictions (0 or 1) using a threshold of 0.5
+binary_predictions <- ifelse(test_predictions >= 0.16, 1, 0)
+
+# Calculate accuracy
+accuracy <- mean(binary_predictions == test_data$permit_22)
+cat("Accuracy of the logistic regression model on the test data:", accuracy)
+```
+
+```{r get the sensitivity}
+# Calculate confusion matrix
+conf_matrix <- table(test_data$permit_22, binary_predictions)
+
+# Calculate precision, recall, and F1 score
+precision <- ifelse(sum(conf_matrix[, 2]) == 0, 0, conf_matrix[2, 2] / sum(conf_matrix[, 2]))
+recall <- ifelse(sum(conf_matrix[2, ]) == 0, 0, conf_matrix[2, 2] / sum(conf_matrix[2, ]))
+f1_score <- ifelse(precision + recall == 0, 0, 2 * precision * recall / (precision + recall))
+
+# Print F1 score
+cat("F1 score of the logistic regression model on the test data:", f1_score)
+```
+
