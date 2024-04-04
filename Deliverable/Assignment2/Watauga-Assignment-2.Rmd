@@ -594,6 +594,8 @@ permit_22 <- st_transform(permit_22, st_crs(parcel))
 ```
 
 ```{r plot_permits, echo=FALSE, message=FALSE, warning=FALSE, fig.show='hold'}
+
+
 plot_permit <- ggplot() +
   geom_sf(data = parcel, color = "lightgrey", fill = "transparent", size = 0.5) +
   geom_sf(data = boundary, color = "red", fill = "transparent", show.legend = FALSE) +
@@ -601,9 +603,14 @@ plot_permit <- ggplot() +
   geom_sf(data = permit_22, aes(color = "Permit 22"), size = 1, alpha = 0.7, show.legend = "point") +
   scale_color_manual(name = "Legend", 
                      values = c("Permit 17" = "red", "Permit 22" = "blue"),
-                     labels = c("Permits 2017", "Permit 2022")) +
+                     labels = c("Permits 2017", "Permits 2022")) +
   theme_void() +
-  theme(legend.position = "right")
+  theme(legend.position = "right") +
+  labs(title = "Watauga Septic Permits",
+       subtitle = "2017 & 2022") +
+  theme(plot.title = element_text(face = "bold", size = 17), 
+        legend.title = element_text(face = "bold"), 
+        legend.text = element_text(size = 10)) 
 
 plot_permit
 
@@ -621,6 +628,7 @@ The Watauga County 2021 land cover underscores the county's rich natural resourc
 
 ```{r read_lulc_data, echo=FALSE, message=FALSE, warning=FALSE}
 
+setwd
 fire_districts <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/GeoJSON/FireDistricts_FeaturesToJSON.geojson")
 managed_areas <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/GeoJSON/managed_areasToJSON.geojson")
 natural_areas <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/GeoJSON/Natural_area_JSON.geojson")
@@ -680,7 +688,6 @@ From 2011 and 2021 Watauga County witnessed a notable shift in land cover, parti
 ##### 2011-2021 {.unnumbered}
 
 ```{r lc_time_series, echo=FALSE, message=FALSE, warning=FALSE}
-
 years.list <- list("2011", "2013", "2016", "2019", "2021")
 
 
@@ -695,15 +702,18 @@ saveGIF({
                                           strip.border = list(col = 'transparent')), 
                       scales = list(col = "transparent"),
                       main=paste0("Watauga County land cover ", years.list[[i]]),
-                      colorkey=FALSE)
+                      colorkey=FALSE,
+                      key = myKey) # Include the key in your plot
     print(plot)
   }
-}, interval=1, movie.name="lc_time_series.gif", ani.width=1200, ani.height=900)
+}, interval=1, movie.name="lc_time_series.gif", ani.width=900, ani.height=600)
 ```
+
+![](C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/lc_time_series.gif) 
 
 ##### 2011 {.unnumbered}
 
-```{r lc_2011, echo=FALSE, message=FALSE, warning=FALSE}
+```{r lc_2011, echo=FALSE, message=FALSE, warning=FALSE, fig.width= 10, fig.height=10}
 rat <- ratify(lc_2011)
 
 myKey <- list(
@@ -807,7 +817,7 @@ levelplot(rat5, att='ID',
 
 ```
 
-```{r lc_to_table, echo=FALSE, message=FALSE, warning=FALSE}
+```{r lc_to_table, cache=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
 
 years<-c(2011, 2013, 2016, 2019, 2021)
 
@@ -835,17 +845,20 @@ As a mountainous area, the new developments highly depend on the topography. The
 
 
 ```{r read_slope, echo=FALSE, message=FALSE, warning=FALSE, fig.align='left'}
-path_1 <- "/Users/alice/Documents/GitHub/Musa_801_Watauga/Data/slope_raster/"
+path_1 <- "C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/slope_raster"
 
 slope <- raster(paste0(path_1,"slope.tif"))
 
 
+# Set up par settings for no background or margins
 
 plot(slope, axes = FALSE, box = FALSE, main = "Slope Angle")
 
 # Save the plot to a PNG file with high resolution
 suppressMessages({dev.copy(png, filename = "slope_plot.png")
 dev.off()})
+
+
 ```
 
 `\n`As 65%(≈33.02°) is the maximum slope suitale for development, we will use 25° as a threshold to identify the areas unsuitable for developments.The plot below shows th reclassified slope degree in the county. The green areas are suitable for development, while the white areas are unsuitable for development.
@@ -1018,7 +1031,7 @@ plot_soil
 
 ### (8) Natural Area
 
-[missing writeup]
+Watauga County is home to numerous sites designated as natural heritage areas or significant natural areas, recognized at national, state, regional, or county levels. These areas, protected through ownership by federal or state entities or held in private hands, serve as critical habitats for biodiversity, cultural heritage sites, or natural resources. Understanding the precise locations of these protected sites is essential for identifying parcels suitable for development while ensuring conservation efforts are respected.
 
 ```{r plot_natural_area_owner, echo=FALSE, fig.show='hold'}
 ggplot() +
