@@ -202,7 +202,8 @@ ggplot(combined_yearsage, aes(x = NAME, y = Age, fill = factor(year))) +
        y = "Age (in years)",
        fill = "Year") +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.y = element_text(color = "grey50"))
 ```
 
 ### (3) Average Household Size
@@ -246,13 +247,14 @@ combined_yearsHH <- bind_rows(countyHH17, countyHH22)
 ggplot(combined_yearsHH, aes(x = NAME, y = Household_Size, fill = factor(year))) +
   geom_bar(stat = "identity", position = "dodge") +
   scale_fill_manual(values = c("#f9bf3e", "#74c1b9")) +
-  labs(title = "Household Size",
+  labs(title = "Average Household Size",
        subtitle = "by county",
        x = " ",
-       y = "Household Size",
+       y = "# of people",
        fill = "Year") +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.y = element_text(color = "grey50"))
 
 ```
 
@@ -302,7 +304,8 @@ ggplot(combined_yearsinc, aes(x = NAME, y = Income, fill = factor(year))) +
        y = "Income (in $)",
        fill = "Year") +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.y = element_text(color = "grey50"))
 ```
 
 ## 2.2 Housing
@@ -364,10 +367,11 @@ ggplot(combined_yearsocup_long, aes(x = NAME, y = Units, fill = Occupancy)) +
   labs(title = "Housing Units",
        subtitle = "by occupancy type",
        x = " ",
-       y = "Number of Housing Units",
+       y = "# of Housing Units",
        fill = "Occupancy") +
   theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.y = element_text(color = "grey50"))
 ```
 
 ### (2) Rent Burden
@@ -447,7 +451,8 @@ ggplot(combined_yearsrent_long, aes(x = reorder(NAME, -Percentage), y = Percenta
        y = "Percentage (%)") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
-        axis.title.x = element_blank())  # Hiding x-axis label
+        axis.title.x = element_blank(),
+        axis.text.y = element_text(color = "grey50"))  # Hiding x-axis label
 ```
 
 ```{r rent_burden_map17, echo=FALSE, message=FALSE, warning=FALSE, fig.show='hold'}
@@ -504,7 +509,7 @@ Within Watauga County sits Appalachian State University, a public four-year univ
 
 ### (5) Number of Households by Vehicles Owned
 
-[missing writeup]
+Watauga is largely a car-dominated community, with nearly every household owning at least one car. In fact, according to the Census, about 14,000 households have 2 or more, suggesting that almost every adult in the county has access to their own car, and may not need to share with a spouse or other housemate. Mobility habits can be ascertained, such as the need to travel far distances for daily trips such as the commute to work or to get groceries.
 
 ```{r vehicles_owned, echo=FALSE, message=FALSE, warning=FALSE, fig.show='hold'}
 county17 <- 
@@ -595,19 +600,20 @@ permit_22 <- st_transform(permit_22, st_crs(parcel))
 
 ```{r plot_permits, echo=FALSE, message=FALSE, warning=FALSE, fig.show='hold'}
 
+#c("#e2a334", "#f9bf3e", "#fcd977", "#9ad7d2", "#74c1b9")
 
 plot_permit <- ggplot() +
-  geom_sf(data = parcel, color = "lightgrey", fill = "transparent", size = 0.5) +
-  geom_sf(data = boundary, color = "red", fill = "transparent", show.legend = FALSE) +
+  geom_sf(data = parcel, color = "grey90", fill = "transparent", size = 0.2) +
+  geom_sf(data = boundary, color = "#cf890e", fill = "transparent", show.legend = FALSE) +
   geom_sf(data = permit_17, aes(color = "Permit 17"), size = 1, alpha = 0.7, show.legend = "point") +
   geom_sf(data = permit_22, aes(color = "Permit 22"), size = 1, alpha = 0.7, show.legend = "point") +
-  scale_color_manual(name = "Legend", 
-                     values = c("Permit 17" = "red", "Permit 22" = "blue"),
-                     labels = c("Permits 2017", "Permits 2022")) +
+  scale_color_manual(name = "Permits", 
+                     values = c("Permit 17" = "#e2a334", "Permit 22" = "#74c1b9"),
+                     labels = c("2017", "2022")) +
   theme_void() +
   theme(legend.position = "right") +
   labs(title = "Watauga Septic Permits",
-       subtitle = "2017 & 2022") +
+       subtitle = "Years: 2017 and 2022") +
   theme(plot.title = element_text(face = "bold", size = 17), 
         legend.title = element_text(face = "bold"), 
         legend.text = element_text(size = 10)) 
@@ -861,7 +867,7 @@ dev.off()})
 
 ```
 
-`\n`As 65%(≈33.02°) is the maximum slope suitale for development, we will use 25° as a threshold to identify the areas unsuitable for developments.The plot below shows th reclassified slope degree in the county. The green areas are suitable for development, while the white areas are unsuitable for development.
+`\n`As 65%(≈33.02°) is the maximum slope suitable for development, we will use 25° as a threshold to identify the areas unsuitable for developments.The plot below shows th reclassified slope degree in the county. The green areas are suitable for development, while the white areas are unsuitable for development.
 
 ```{r rec_slope, echo=FALSE, message=FALSE, warning=FALSE, fig.align='left'}
 rec_slope <- raster(paste0(path_1, "rec_slope25.tif"))
