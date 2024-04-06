@@ -851,9 +851,9 @@ As a mountainous area, the new developments highly depend on the topography. The
 
 
 ```{r read_slope, echo=FALSE, message=FALSE, warning=FALSE, fig.align='left'}
-path_1 <- "C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/slope_raster"
+path_1 <- "/Users/alice/Documents/GitHub/Musa_801_Watauga/Data/slope_raster/"
 
-slope <- raster(paste0(path_1,"slope.tif"))
+slope <- raster(paste0(path_1,"Slope.tif"))
 
 
 # Set up par settings for no background or margins
@@ -867,7 +867,7 @@ dev.off()})
 
 ```
 
-`\n`As 65%(≈33.02°) is the maximum slope suitable for development, we will use 25° as a threshold to identify the areas unsuitable for developments.The plot below shows th reclassified slope degree in the county. The green areas are suitable for development, while the white areas are unsuitable for development.
+As 65%(≈33.02°) is the maximum slope suitable for development, we will use 25° as a threshold to identify the areas unsuitable for developments.The plot below shows th reclassified slope degree in the county. The green areas are suitable for development, while the white areas are unsuitable for development.
 
 ```{r rec_slope, echo=FALSE, message=FALSE, warning=FALSE, fig.align='left'}
 rec_slope <- raster(paste0(path_1, "rec_slope25.tif"))
