@@ -32,8 +32,8 @@ source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-L
 
 ## 1. Loading Data
 ```{r}
-sample <- st_read('D:/Upenn/2024 Spring/MUSA Practicum/Musa_801_Watauga/Resample/final_modeling.csv')
-resample <- st_read("D:/Upenn/2024 Spring/MUSA Practicum/Musa_801_Watauga/Resample/final_modeling_noID.csv")
+sample <- st_read('https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Resample/final_modeling.csv')
+resample <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Resample/final_modeling_noID.csv")
 ```
 # 2. Start with Logistic Modeling
 ## 2.1 Building the model
