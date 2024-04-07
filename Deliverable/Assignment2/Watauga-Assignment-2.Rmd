@@ -746,7 +746,7 @@ levelplot(rat, att='ID',
 
 ##### 2013 {.unnumbered}
 
-```{r lc_2013, echo=FALSE, message=FALSE, warning=FALSE}
+```{r lc_2013, echo=FALSE, message=FALSE, warning=FALSE, fig.width= 10, fig.height=10}
 rat2 <- ratify(lc_2013)
 
 levelplot(rat2, att='ID', 
@@ -765,7 +765,7 @@ levelplot(rat2, att='ID',
 
 ##### 2016 {.unnumbered}
 
-```{r lc_2016, echo=FALSE, message=FALSE, warning=FALSE}
+```{r lc_2016, echo=FALSE, message=FALSE, warning=FALSE, fig.width= 10, fig.height=10}
 rat3 <- ratify(lc_2016)
 
 levelplot(rat3, att='ID', 
@@ -784,7 +784,7 @@ levelplot(rat3, att='ID',
 
 ##### 2019 {.unnumbered}
 
-```{r lc_2019, echo=FALSE, message=FALSE, warning=FALSE}
+```{r lc_2019, echo=FALSE, message=FALSE, warning=FALSE, fig.width= 10, fig.height=10}
 rat4 <- ratify(lc_2019)
 
 levelplot(rat4, att='ID', 
@@ -803,7 +803,7 @@ levelplot(rat4, att='ID',
 
 ##### 2021 {.unnumbered}
 
-```{r lc_2021_2, echo=FALSE, message=FALSE, warning=FALSE}
+```{r lc_2021_2, echo=FALSE, message=FALSE, warning=FALSE, fig.width= 10, fig.height=10}
 vals <-unique(s[[5]])  # Get unique values from lc_2021
 df <- legend[legend$ID %in% vals,]  # Filter legend information based on lc_2021 values
 rat5 <- ratify(lc_2021)
@@ -1050,17 +1050,7 @@ ggplot() +
   theme_void()
 ```
 
-```{r plot_natural_area_rating, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
-ggplot() +
-  geom_sf(data = boundary, fill = NA, color = "black") + 
-  geom_sf(data = natural_areas, aes(fill = C_RATING)) + 
-  scale_fill_manual(values = color_palette) + 
-  labs(title = "Watauga Natural Rating",
-       subtitle = "Year: 2022",
-       color = "Rating") +
-  theme_void()
 
-```
 
 ## 2.5 Economic Features
 
