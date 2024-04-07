@@ -4,6 +4,7 @@ author: "Jarred_Randall"
 date: "2024-02-12"
 output: html_document
 ---
+
 ```{r clear_environment, cache=TRUE, include=F}
 
 rm(list=ls())
@@ -16,8 +17,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r Library}
-install.packages("FedData")
-install.packages("animation")
+
 library(raster) 
 library(rgdal)
 library(animation)
@@ -41,146 +41,8 @@ options(scipen = 999, digits = 2)
 
 color_palette <- c("#e2a334", "#f9bf3e", "#fcd977", "#9ad7d2", "#74c1b9")
 ```
-# Write up
-
-## Problem Statement / Use Case
-
-Watauga County, North Carolina, is currently experiencing a housing shortage that is expected to intensify in the near future. The shortage is exacerbated by vacation rentals and student housing, which has significantly reduced the available residential housing options. The Watauga Housing Solutions Committee is partnering with other community and local government organizations looking to develop affordable and workforce housing in order to mitigate the severe decreases in housing affordability. They are working with a developer to prioritize the most feasible sites to pursue for purchase and development. Because of the extreme physical conditions of the landscape (slope, soils, etc.) there is currently no streamlined system in place to help identify suitable parcels for development. In response to this issue, we have been contracted to develop an application-based data framework that is designed to identify land parcels based on their likelihood to be developed for affordable and workforce housing.  This data framework will be designed to function as an interactive application interface that will allow users to input criteria related to land supply and combine it with development likelihood estimates to rank each parcel in the county in terms of suitability.
-
-## Project Client:
-
-The main project client is the Watauga Housing Council and its Housing Solutions Committee. This organization is tasked with responding to the economic, environmental, and social aspects of the county to provide adequate housing options for all residents. our main points of contacts within the housing council are Dr. Kellie Reed Ashcraft, Facilitator/Organizer, Watauga Housing Council, Dr. Chris Quattro, Assistant Professor, Appalachian State University/Member, Watauga Housing Council , Laura Beach, Member, Watauga Housing Council. 
-
-## Dependent Variable: Septic System Permits 
-The key indicator for development (dependent variable) that will be used is the administrative record associated with septic system permits. This permit is exclusively granted when a property satisfies the requirements for both land supply and developer demand at that specific site. Due to the rural nature of the project area, there is relatively low wastewater sewer coverage. subsequently, a septic system is critical for new development, and a site cannot be developed without one. Our approach will involve identifying the site suitability characteristics (e.g., slope, soils) most closely related to the probability of a parcel receiving a septic permit. Using this information, we will forecast the likelihood that a given parcel will receive a new septic permit. 
 
 
-# Data Wrangling Percent Rent Burdened by Surrounding Counties 
-```{r}
-
-county17 <- 
-  get_acs(geography = "county", 
-          variables = c("B25070_007E",
-                        "B25070_008E",
-                        "B25070_009E",
-                        "B25070_010E",
-                        "B25070_011E",
-                        "B25003_003E"), 
-          year=2017, state="NC", 
-          geometry=TRUE, output="wide") %>%
-  st_transform('EPSG:4326') %>%
-  rename(RentBurden_30_35 = B25070_007E,
-         RentBurden_35_39 = B25070_008E,
-         RentBurden_40_49 = B25070_009E,
-         RentBurden_50_99 = B25070_010E,
-         RentBurden_60_more = B25070_011E,
-         total_renter_occupied = B25003_003E) %>%
-  dplyr::select(-starts_with("B")) %>%
-  mutate(rent_burdened_households = RentBurden_30_35 + RentBurden_35_39 + RentBurden_40_49 + RentBurden_50_99 + RentBurden_60_more,
-         Percent_rent_burdened = round((rent_burdened_households / total_renter_occupied) * 100, 0),
-         NAME = str_replace(NAME, ", North Carolina", "")) %>%
-  dplyr::filter(NAME %in% c("Avery County", "Wilkes County", "Ashe County", "Watauga County","Caldwell County")) %>%
-  dplyr::select(GEOID, NAME, rent_burdened_households, total_renter_occupied, Percent_rent_burdened)
-
-
-
-county22 <- 
-  get_acs(geography = "county", 
-          variables = c("B25070_007E",
-                        "B25070_008E",
-                        "B25070_009E",
-                        "B25070_010E",
-                        "B25070_011E",
-                        "B25003_003E"), 
-          year=2022, state="NC", 
-          geometry=TRUE, output="wide") %>%
-  st_transform('EPSG:4326') %>%
-  rename(RentBurden_30_35 = B25070_007E,
-         RentBurden_35_39 = B25070_008E,
-         RentBurden_40_49 = B25070_009E,
-         RentBurden_50_99 = B25070_010E,
-         RentBurden_60_more = B25070_011E,
-         total_renter_occupied = B25003_003E) %>%
-  dplyr::select(-starts_with("B")) %>%
-  mutate(rent_burdened_households = RentBurden_30_35 + RentBurden_35_39 + RentBurden_40_49 + RentBurden_50_99 + RentBurden_60_more,
-         Percent_rent_burdened = round((rent_burdened_households / total_renter_occupied) * 100, 0),
-         NAME = str_replace(NAME, ", North Carolina", "")) %>%
-  dplyr::filter(NAME %in% c("Avery County", "Wilkes County", "Ashe County", "Watauga County", "Caldwell County")) %>%
-  dplyr::select(GEOID, NAME, rent_burdened_households, total_renter_occupied, Percent_rent_burdened)
-
-county17 <- county17 %>% mutate(year = 2017)
-county22 <- county22 %>% mutate(year = 2022)
-
-combined_years <- bind_rows(county17, county22)
-
-
-
-county22 <- 
-  get_acs(geography = "county", 
-          variables = c("B25070_007E",
-                        "B25070_008E",
-                        "B25070_009E",
-                        "B25070_010E",
-                        "B25070_011E",
-                        "B25003_003E"), 
-          year=2022, state="NC", 
-          geometry=TRUE, output="wide") %>%
-  st_transform('EPSG:4326') %>%
-  rename(RentBurden_30_35 = B25070_007E,
-         RentBurden_35_39 = B25070_008E,
-         RentBurden_40_49 = B25070_009E,
-         RentBurden_50_99 = B25070_010E,
-         RentBurden_60_more = B25070_011E,
-         total_renter_occupied = B25003_003E) %>%
-  dplyr::select(-starts_with("B"))
-
-```
-
-# Maps
-```{r}
-
-ggplot(data = county17) +
-  geom_sf(aes(fill = Percent_rent_burdened)) + # Removed color = color_palette here
-  scale_fill_gradientn(colors = color_palette) + # Use this to apply your color palette
-  geom_sf_text(aes(label = NAME), 
-               size = 4, # Adjusted size
-               colour = "black", 
-               check_overlap = TRUE,
-               fontface = "bold") + # Make text bold
-  geom_sf_text(aes(label = paste0(Percent_rent_burdened, "%")), 
-               size = 3.5, # Adjusted size
-               colour = "black", 
-               check_overlap = TRUE, 
-               nudge_y = -0.05,
-               fontface = "bold") + # Make text bold
-  labs(title = "Rent Burdened Households by County",
-       subtitle = "Year: 2017") +
-  theme_void() +
-  theme(legend.position = "right")
-```
-
-
-```{r}
-
-ggplot(data = county22) +
-  geom_sf(aes(fill = Percent_rent_burdened)) + # Removed color = color_palette here
-  scale_fill_gradientn(colors = color_palette) + # Use this to apply your color palette
-  geom_sf_text(aes(label = NAME), 
-               size = 4, # Adjusted size
-               colour = "black", 
-               check_overlap = TRUE,
-               fontface = "bold") + # Make text bold
-  geom_sf_text(aes(label = paste0(Percent_rent_burdened, "%")), 
-               size = 3.5, # Adjusted size
-               colour = "black", 
-               check_overlap = TRUE, 
-               nudge_y = -0.05,
-               fontface = "bold") + # Make text bold
-  labs(title = "Rent Burdened Households by County",
-       subtitle = "Year: 2022") +
-  theme_void() +
-  theme(legend.position = "right")
-```
 
 ```{r read_data}
 
@@ -239,7 +101,7 @@ ggplot() +
 
 ####### Updated Landcover section
 
-### Watauga 2021 Land cover 
+### Watauga 2021 Land cover
 
 The Watauga County 2021 land cover underscores the county's rich natural resources and moderate urban development. The total land cover area is predominantly forested land (74.56%), with 54.16% of the county’s land cover area being deciduous forest and 19.2% mixed forest, and 1.2% evergreen forest. Developed areas, which is limited to about 13.89% of the total land cover area is made up of 11.23% of developed open space, 1.48% developed low intensity, 0.9% developed medium density, 0.28% developed high intensity. The majority of development is classified as open space, which could encompass parks, golf courses, or agricultural land that adds to the rural character of the county. The incrementally smaller percentages for low, medium, and high-intensity developments indicate concentrated urbanization around cities and transportation corridors, reflecting strategic land use planning that preserves the natural landscape while accommodating residential and commercial needs.
 
@@ -302,7 +164,13 @@ suppressMessages({saveGIF({
     print(plot)
   }
 }, interval=1, movie.name="lc_time_series.gif", ani.width=1200, ani.height=900)})
+
+
+
+
 ```
+
+![](C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/lc_time_series.gif)
 
 ##### 2011 {.unnumbered}
 
@@ -334,8 +202,8 @@ levelplot(rat, att='ID',
           main = "Watauga 2011 Land Cover") # Title added here
 ```
 
-
 ##### 2013 {.unnumbered}
+
 ```{r lc_2013, echo=FALSE, message=FALSE, warning=FALSE}
 rat2 <- ratify(lc_2013)
 
@@ -354,6 +222,7 @@ levelplot(rat2, att='ID',
 ```
 
 ##### 2016 {.unnumbered}
+
 ```{r lc_2016, echo=FALSE, message=FALSE, warning=FALSE}
 rat3 <- ratify(lc_2016)
 
@@ -372,6 +241,7 @@ levelplot(rat3, att='ID',
 ```
 
 ##### 2019 {.unnumbered}
+
 ```{r lc_2019, echo=FALSE, message=FALSE, warning=FALSE}
 rat4 <- ratify(lc_2019)
 
@@ -411,11 +281,7 @@ levelplot(rat5, att='ID',
 
 ```
 
-
 ###### udpate ends here
-
-
-
 
 ```{r}
 
@@ -442,8 +308,6 @@ saveGIF({
 
 
 ```
-
-
 
 ```{r}
 
@@ -474,165 +338,3 @@ kable(d[,c(2,10,13,14)])  %>%
 ```
 
 
-
-
-
-
-
-###Final Code for landcover percentages per parcel
-```{r}
-
-
-lc_2021 <- raster("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/Landuse_Raster/lulc_2021")
-lc_2019 <- raster("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/Landuse_Raster/lulc_2019")
-lc_2016 <- raster("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/Landuse_Raster/lulc_2016")
-lc_2013 <- raster("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/Landuse_Raster/lulc_2013")
-lc_2011 <- raster("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/Landuse_Raster/lulc_2011")
-
-
-parcels <- parcels
-landcover_2016 <- lc_2016
-
-
-# Transform CRS of parcels to match the landcover raster if they are different
-if (st_crs(parcels) != crs(landcover_2016)) {
-  parcels <- st_transform(parcels, crs = crs(landcover_2016))
-}
-
-# Perform the exact extraction
-coverage <- exact_extract(landcover_2016, parcels, include_cols = c("GlobalID"))
-
-# Function to calculate and round percentages
-calculate_percentages <- function(df) {
-  total_area <- sum(df$coverage_fraction)
-  percentages <- 100 * df$coverage_fraction / total_area
-  percentages_rounded <- round(percentages, 2)  # Round percentages to 2 decimal places
-  return(percentages_rounded)
-}
-
-# Apply calculate_percentages and bind results to a new data frame
-parcel_percentages <- do.call(rbind, lapply(coverage, function(x) {
-  percentages <- calculate_percentages(x)
-  x$percentage <- percentages  # Assign rounded percentages
-  return(x)
-}))
-
-# Spread the data to wide format and summarize
-parcel_percentages_wide <- parcel_percentages %>%
-  group_by(GlobalID, value) %>%
-  summarize(percentage = sum(percentage, na.rm = TRUE), .groups = 'drop') %>%
-  pivot_wider(names_from = value, values_from = percentage, names_prefix = "Landcover_")
-
-# Merge with original parcels data to include geospatial information
-final_dataset <- parcels %>%
-  left_join(parcel_percentages_wide, by = "GlobalID")
-
-# Select the desired columns and turn NA's to 0 for landcover columns
-parcel_lc_2016 <- final_dataset %>%
-  select(GlobalID, starts_with("Landcover_")) %>%
-  mutate(across(starts_with("Landcover_"), ~replace_na(round(., 2), 0)))  # Ensure rounding here just in case and replace NA with 0
-
-
-parcel_lc_2016 <- parcel_lc_2016 %>%
-  rename("Open_Water" = "Landcover_11",
-  "Developed_Open_Space" = "Landcover_21",
-  "Developed_Low_Intensity" = "Landcover_22",
-  "Developed_Medium_Intensity" = "Landcover_23",
-  "Developed_High_Intensity" = "Landcover_24",
-  "Barren_Land" = "Landcover_31",
-  "Deciduous_Forest" = "Landcover_41",
-  "Evergreen_Forest" = "Landcover_42",
-  "Mixed_Forest" = "Landcover_43",
-  "Shrub_Scrub" = "Landcover_52",
-  "Grassland_Herbaceous" = "Landcover_71",
-  "Pasture_Hay" = "Landcover_81",
-  "Cultivated_Crops" = "Landcover_82",
-  "Woody_Wetlands" = "Landcover_90",
-  "Emergent_Herbaceous_Wetlands" = "Landcover_95"
-)
-
-library(dplyr)
-
-
-parcel_lc_2016_no_geom <- st_set_geometry(parcel_lc_2016, NULL)
-
-# View the final dataset
-View(parcel_lc_2016)
-
-write.csv(parcel_lc_2016_no_geom, "parcel_landcover_percentages_2016.csv", row.names = FALSE)
-
-
-
-```
-
-```{r}
-
-parcels <- parcels
-landcover_2021 <- lc_2021
-
-
-# Transform CRS of parcels to match the landcover raster if they are different
-if (st_crs(parcels) != crs(landcover_2021)) {
-  parcels <- st_transform(parcels, crs = crs(landcover_2021))
-}
-
-# Perform the exact extraction
-coverage <- exact_extract(landcover_2021, parcels, include_cols = c("GlobalID"))
-
-# Function to calculate and round percentages
-calculate_percentages <- function(df) {
-  total_area <- sum(df$coverage_fraction)
-  percentages <- 100 * df$coverage_fraction / total_area
-  percentages_rounded <- round(percentages, 2)  # Round percentages to 2 decimal places
-  return(percentages_rounded)
-}
-
-# Apply calculate_percentages and bind results to a new data frame
-parcel_percentages <- do.call(rbind, lapply(coverage, function(x) {
-  percentages <- calculate_percentages(x)
-  x$percentage <- percentages  # Assign rounded percentages
-  return(x)
-}))
-
-# Spread the data to wide format and summarize
-parcel_percentages_wide <- parcel_percentages %>%
-  group_by(GlobalID, value) %>%
-  summarize(percentage = sum(percentage, na.rm = TRUE), .groups = 'drop') %>%
-  pivot_wider(names_from = value, values_from = percentage, names_prefix = "Landcover_")
-
-# Merge with original parcels data to include geospatial information
-final_dataset <- parcels %>%
-  left_join(parcel_percentages_wide, by = "GlobalID")
-
-# Select the desired columns and turn NA's to 0 for landcover columns
-parcel_lc_2021 <- final_dataset %>%
-  select(GlobalID, starts_with("Landcover_"), geometry) %>%
-  mutate(across(starts_with("Landcover_"), ~replace_na(round(., 2), 0)))  # Ensure rounding here just in case and replace NA with 0
-
-
-parcel_lc_2021 <- parcel_lc_2021 %>%
-  rename("Open Water" = "Landcover_11",
-  "Developed, Open Space" = "Landcover_21",
-  "Developed, Low Intensity" = "Landcover_22",
-  "Developed, Medium Intensity" = "Landcover_23",
-  "Developed High Intensity" = "Landcover_24",
-  "Barren Land (Rock/Sand/Clay)" = "Landcover_31",
-  "Deciduous Forest" = "Landcover_41",
-  "Evergreen Forest" = "Landcover_42",
-  "Mixed Forest" = "Landcover_43",
-  "Shrub/Scrub" = "Landcover_52",
-  "Grassland/Herbaceous" = "Landcover_71",
-  "Pasture/Hay" = "Landcover_81",
-  "Cultivated Crops" = "Landcover_82",
-  "Woody Wetlands" = "Landcover_90",
-  "Emergent Herbaceous Wetlands" = "Landcover_95"
-)
-
-# View the final dataset
-View(parcel_lc_2021)
-
-parcel_lc_2021_no_geom <- st_set_geometry(parcel_lc_2021, NULL)
-
-write.csv(parcel_lc_2021_no_geom, "parcel_landcover_percentages_2021.csv", row.names = FALSE)
-
-```
