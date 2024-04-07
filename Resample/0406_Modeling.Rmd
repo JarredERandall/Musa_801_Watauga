@@ -393,7 +393,6 @@ print(paste("Mean Absolute Error:", mae))
 ```
 
 ```{r}
-# Define the number of folds for cross-validation
 k <- 5
 
 # Initialize an empty dataframe to store results
@@ -424,11 +423,14 @@ for (i in 1:k) {
   results_df <- rbind(results_df, data.frame(Fold = i, MAE = fold_mae))
 }
 
+# Calculate the mean value of MAE across all folds
+mean_mae <- mean(results_df$MAE)
+
 # Print the dataframe
 print(results_df)
 
-mean_mae <- mean(mae_values)
-print(paste("Overall Mean Absolute Error:", mean_mae))
+# Print the mean MAE value
+print(paste("Mean MAE across all folds:", mean_mae))
 ```
 
 ```{r}
