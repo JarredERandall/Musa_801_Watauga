@@ -746,7 +746,7 @@ levelplot(rat, att='ID',
 
 ##### 2013 {.unnumbered}
 
-```{r lc_2013, echo=FALSE, message=FALSE, warning=FALSE, fig.width= 10, fig.height=10}
+```{r lc_2013, echo=FALSE, message=FALSE, warning=FALSE}
 rat2 <- ratify(lc_2013)
 
 levelplot(rat2, att='ID', 
@@ -765,7 +765,7 @@ levelplot(rat2, att='ID',
 
 ##### 2016 {.unnumbered}
 
-```{r lc_2016, echo=FALSE, message=FALSE, warning=FALSE, fig.width= 10, fig.height=10}
+```{r lc_2016, echo=FALSE, message=FALSE, warning=FALSE}
 rat3 <- ratify(lc_2016)
 
 levelplot(rat3, att='ID', 
@@ -784,7 +784,7 @@ levelplot(rat3, att='ID',
 
 ##### 2019 {.unnumbered}
 
-```{r lc_2019, echo=FALSE, message=FALSE, warning=FALSE, fig.width= 10, fig.height=10}
+```{r lc_2019, echo=FALSE, message=FALSE, warning=FALSE}
 rat4 <- ratify(lc_2019)
 
 levelplot(rat4, att='ID', 
@@ -803,7 +803,7 @@ levelplot(rat4, att='ID',
 
 ##### 2021 {.unnumbered}
 
-```{r lc_2021_2, echo=FALSE, message=FALSE, warning=FALSE, fig.width= 10, fig.height=10}
+```{r lc_2021_2, echo=FALSE, message=FALSE, warning=FALSE}
 vals <-unique(s[[5]])  # Get unique values from lc_2021
 df <- legend[legend$ID %in% vals,]  # Filter legend information based on lc_2021 values
 rat5 <- ratify(lc_2021)
@@ -851,9 +851,9 @@ As a mountainous area, the new developments highly depend on the topography. The
 
 
 ```{r read_slope, echo=FALSE, message=FALSE, warning=FALSE, fig.align='left'}
-path_1 <- "/Users/alice/Documents/GitHub/Musa_801_Watauga/Data/slope_raster/"
+path_1 <- "C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/slope_raster"
 
-slope <- raster(paste0(path_1,"Slope.tif"))
+slope <- raster(paste0(path_1,"slope.tif"))
 
 
 # Set up par settings for no background or margins
@@ -867,7 +867,7 @@ dev.off()})
 
 ```
 
-As 65%(≈33.02°) is the maximum slope suitable for development, we will use 25° as a threshold to identify the areas unsuitable for developments.The plot below shows th reclassified slope degree in the county. The green areas are suitable for development, while the white areas are unsuitable for development.
+`\n`As 65%(≈33.02°) is the maximum slope suitable for development, we will use 25° as a threshold to identify the areas unsuitable for developments.The plot below shows th reclassified slope degree in the county. The green areas are suitable for development, while the white areas are unsuitable for development.
 
 ```{r rec_slope, echo=FALSE, message=FALSE, warning=FALSE, fig.align='left'}
 rec_slope <- raster(paste0(path_1, "rec_slope25.tif"))
@@ -1050,6 +1050,54 @@ ggplot() +
   theme_void()
 ```
 
+```{r plot_natural_area_rating, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+ggplot() +
+  geom_sf(data = boundary, fill = NA, color = "black") + 
+  geom_sf(data = natural_areas, aes(fill = C_RATING)) + 
+  scale_fill_manual(values = color_palette) + 
+  labs(title = "Watauga Natural Rating",
+       subtitle = "Year: 2022",
+       color = "Rating") +
+  theme_void()
+
+```
+
+### (9) Spatial Lag
+```{r}
+# import spatial lag dataset
+library(dplyr)
+library(sf)
+library(ggplot2)
+
+parcel_spat_lag_merged <- merge(parcel, parcel_spatial_lag, by = "GlobalID")
+parcel_spat_lag_map <- subset(parcel_spat_lag_merged, select = c(GlobalID, permit_17.nn_3, permit_17.nn_5))
+
+# let's map!
+
+plot_spatial_lag_3 <- ggplot() +
+  geom_sf(data = sf_merged, aes(fill = permit_17.nn_3), color = NA, size = 0) +
+  scale_fill_gradient(high = "#e2a334", low = "#74c1b9", breaks = c(5000, 10000, 15000, 20000, 25000)) +
+  labs(title = "Spatial Lag (3)",
+       subtitle = "Year: 2017",
+       fill = "Spatial Lag")
+  theme_minimal()
+
+plot_spatial_lag_5 <- ggplot() +
+  geom_sf(data = sf_merged, aes(fill = permit_17.nn_5), color = NA, size = 0) +
+  scale_fill_gradient(high = "#e2a334", low = "#74c1b9",
+                      breaks = c(5000, 10000, 15000, 20000, 25000)) +
+  labs(title = "Spatial Lag (5)",
+       subtitle = "Year: 2017",
+       fill = "Spatial Lag")
+  theme_void()
+
+  
+plot_spatial_lag_3  
+plot_spatial_lag_5
+
+```
+
+
 
 
 ## 2.5 Economic Features
@@ -1064,14 +1112,34 @@ property_value <- st_transform(property_value, st_crs(parcel))
 ```
 
 ```{r plot_property_value, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
-# Show a chloropleth map of property value, based on the value of column 'SALEPRICE'
-plot_value <- ggplot() +
-  geom_sf(data = property_value, aes(fill = SALEPRICE)) +
-  scale_fill_viridis_c(name = "Property Value", na.value = "white") + # Adjust color scale as needed
-  theme_void()
+parcel_inflation_merged <- merge(parcel, parcel_w_inflation, by = "GlobalID")
+parcel_inflation_map <- subset(parcel_inflation_merged, select = c(GlobalID, inflation17, inflation22))
 
-# Save the plot as a high-resolution image
-#ggsave("plot_permit.png", plot, width = 10, height = 8, dpi = 300)
+parcel_inflation_map$inflation17 <- as.numeric(parcel_inflation_map$inflation17)
+
+breaks <- c(0, 5000, 25000, 100000, 400000, Inf)
+labels <- c("0-5000", "5001-25000", "25001-100000", "100001-400000", "greater than 400,000")
+parcel_inflation_map$bins <- cut(parcel_inflation_map$inflation17, breaks = breaks, labels = labels, include.lowest = TRUE)
+
+parcel_inflation_map$bins <- factor(parcel_inflation_map$bins, levels = labels)
+
+ggplot() +
+  geom_sf(data = parcel_inflation_map, aes(fill = bins), color = NA) +
+  scale_fill_manual(
+    values = c("0-5000" = "#eef7f6", 
+               "5001-25000" = "#dcefed", 
+               "25001-100000" = "#b9dfdb", 
+               "100001-400000" = "#74c1b9", 
+               "greater than 400,000" = "#50afa5"),
+    labels = c("less than $5,000", "$5,001-$25,000", "$25,001-$100,000", "$100,001-$400,000", "greater than $400,000"),
+    drop = FALSE
+  ) +
+  labs(
+    title = "Parcel Values (adjusted for inflation)",
+    subtitle = "Year: 2017",
+    fill = "Parcel Value ($)"
+  ) +
+  theme_minimal()
 
 ```
 
