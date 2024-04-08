@@ -27,6 +27,7 @@ root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analyti
 source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
 ```
 
+For our modeling process, we attempted three different models: the logistic model (to calculate probabilities), Random Forest, and Poisson regression (permit number). We've encountered various issues, including overfitting and misleadingly high accuracy rates, which we attribute to our imbalanced dataset—only 0.05 percent of parcels have permits. To address this, we've tried removing parcels with slopes too steep for development and resampling by oversampling the instances with permits (randomly duplicating the 1’s), yet we still end up with similar challenges. Below, you will find the results of these three models to assist in deciding which model type is best to proceed with.
 
 # Start Modeling
 
@@ -35,7 +36,7 @@ source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-L
 sample <- st_read('https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Resample/final_modeling.csv')
 resample <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Resample/final_modeling_noID.csv")
 ```
-# 2. Start with Logistic Modeling
+# 2.Logistic Modeling
 ## 2.1 Building the model
 ```{r change dataset as numeric data}
 sample <- sample %>%
@@ -44,6 +45,10 @@ sample <- sample %>%
 sample <- na.omit(sample)
 
 ```
+## Splitting into Training and Testing Set
+
+The logistic regression model developed to predict permit issuance (permit_22) in Watauga County based on various environmental and land use characteristics encountered significant results, alongside challenges attributable to data imbalance. Key steps in the modeling process included data preparation (like converting permit_22 to a categorical variable and excluding non-relevant predictors), training the model on 80% of the dataset, and evaluating its coefficients and overall fit.
+
 
 ```{r Logistic Modeling}
 # Set the seed for reproducibility
@@ -65,6 +70,9 @@ logistic_model <- glm(permit_22 ~ ., data = train_data%>%dplyr::select(-GlobalID
 # Print summary of the model
 summary(logistic_model)
 ```
+
+Significant predictors such as Slope_Max, Developed_High_Intensity, and Barren_Land were identified, indicating their strong influence on the probability of permit issuanceDespite achieving a model with certain significant predictors, challenges arose, notably the dataset's imbalance (only 0.05% of parcels having permits), which likely contributed to issues of overfitting and misleadingly high accuracy rates. 
+
 ```{r p_value of all features}
 # Extract coefficient estimates and p-values
 coefficients <- summary(logistic_model)$coefficients
@@ -83,7 +91,9 @@ abline(h = 0.05, col = "#e2a334ff", lty = 2)  # Add horizontal line at y = 0.05
 
 
 ```
-## 2.2 Making Predictions & Researched the metrics
+## 2.2 Making Predictions &  metrics
+
+The model predicts at an accuracy rate of 90%, this accuracy rate is misleading because of the imbalanced dataset where 95% of the parcels in the dataset do not have a septic permit 
 
 ```{r make predictions}
 test_predictions <- predict(logistic_model, newdata = test_data, type = "response")
@@ -95,6 +105,9 @@ binary_predictions <- ifelse(test_predictions >= 0.5, 1, 0)
 accuracy <- mean(binary_predictions == test_data$permit_22)
 cat("Accuracy of the logistic regression model on the test data:", accuracy)
 ```
+
+
+The F1 score here is 0. This result suggests a  issue in our model performance, particularly in identifying the positive class (parcels with a septic permit) accurately. 
 ```{r Sensitivity}
 # Calculate confusion matrix
 conf_matrix <- table(test_data$permit_22, binary_predictions)
@@ -126,6 +139,9 @@ head(testProbs)
 caret::confusionMatrix(testProbs$predOutcome, testProbs$Outcome, 
                        positive = "1")
 ```
+The Confusion Matrix shows a Sensitivity of 0%, indicating the model failed to correctly predict any of the actual positive cases, And a Specificity of Nearly 100%, showing the model is extremely good at identifying true negatives but at the cost of not detecting positives.
+
+
 ```{r ROC Curve}
 library(plotROC)
 
@@ -133,8 +149,10 @@ ggplot(testProbs, aes(d = as.numeric(testProbs$Outcome), m = Probs)) +
   geom_roc(n.cuts = 50, labels = FALSE, colour = "#FE9900") +
   style_roc(theme = theme_grey) +
   geom_abline(slope = 1, intercept = 0, size = 1.5, color = 'grey') +
-  labs(title = "ROC Curve - churnModel")
+  labs(title = "ROC Curve - Permit Model")
 ```
+
+The model AUC is 0.6872 which implies that there is a roughly 68.72% chance that the model will rank a randomly chosen positive instance (actual permit granted) higher than a randomly chosen negative one (no permit).
 ```{r AUC}
 library(pROC)
 
@@ -152,6 +170,8 @@ auc_value <- auc(roc_curve)
 # Print AUC value
 print(auc_value)
 ```
+
+There is a significant overlap between the two distributions, particularly around the lower probability scores, indicating that the model has difficulty distinguishing between Developed and Not Developed classes in many cases. We will try adjusting for optimal threshold. 
 
 ```{r Model Distribution}
 # Predict probabilities on the test data
@@ -203,7 +223,7 @@ whichThreshold <-
 
 whichThreshold[1:5,]
 ```
-
+adjusting the threshold for predicting a positive case from the default 0.5 to 0.12 would result in the best balance between capturing true positives and maintaining accuracy.
 
 ```{r}
 ggplot(whichThreshold, aes(x = Rate_TP, y = Accuracy)) +
@@ -253,6 +273,7 @@ cat("True Positive Rate (TPR) of the logistic regression model:", TP_rate)
 
 
 # 3.Random forest model
+When running a Random Forest Model we end of with an extremely overfitted model with a accuracy and F1 of 1. 
 ```{r Rf model building}
 library(randomForest)
 
@@ -291,7 +312,7 @@ f1_score <- ifelse(precision + recall == 0, 0, 2 * precision * recall / (precisi
 cat("F1 score of the Random Forest model on the test data:", f1_score)
 
 ```
-This model seems to be overfit.
+
 
 ```{r TPR}
 # Get the true positive (TP) count
@@ -353,7 +374,7 @@ ggplot(testProbs, aes(x = pred, fill = as.factor(obs))) +
   theme_minimal()
 
 ```
-# 4.Pisson regression
+# 4.Poisson regression
 
 ```{r Pisson Regression}
 set.seed(123)
@@ -374,6 +395,7 @@ poisson_model <- glm(n_permit_22 ~ ., data = train_data%>%dplyr::select(-GlobalI
 summary(poisson_model)
 ```
 
+The Poisson models MAE of 0.261 indicates that on average the model the predictions of the model ate about 0.261 units off from the actual values. 
 ```{r model MAE}
 # Assuming you have a test dataset called test_data
 
