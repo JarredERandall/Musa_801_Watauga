@@ -173,12 +173,18 @@ print(auc_value)
 
 There is a significant overlap between the two distributions, particularly around the lower probability scores, indicating that the model has difficulty distinguishing between Developed and Not Developed classes in many cases. We will try adjusting for optimal threshold. 
 
+```{r}
+# Convert permit_22 to numeric and store in a dataframe
+df <- data.frame(permit_numeric = as.numeric(test_data$permit_22))
+```
+
+
 ```{r Model Distribution}
 # Predict probabilities on the test data
 predicted_probabilities <- predict(logistic_model, newdata = test_data, type = "response")
 
 # Create dataframe for observed and predicted probabilities
-roc_curve <- data.frame(obs = as.numeric(test_data$permit_22),
+roc_curve <- data.frame(obs = test_data$permit_22,
                         pred = predicted_probabilities)
 
 # Plot density curves
@@ -187,12 +193,11 @@ ggplot(roc_curve, aes(x = pred, fill = as.factor(obs))) +
   facet_grid(obs ~ .) + 
   xlab("Probability") +
   ylab("Frequency") +
-  geom_vline(xintercept = 0.5) +
+  geom_vline(xintercept = 0.12) +
   scale_fill_manual(values = c("#559a90ff", "#e2a334ff"),
                     labels = c("Not Developed", "Developed"),
                     name = "") +
   theme_minimal()
-
 ```
 
 ## 2.3 Try to get the best threshold
@@ -233,6 +238,7 @@ ggplot(whichThreshold, aes(x = Rate_TP, y = Accuracy)) +
 
 ```
 Try when Rate_TP = 0.5, threshold = 0.12
+
 
 ```{r}
 test_predictions <- predict(logistic_model, newdata = test_data, type = "response")
@@ -340,7 +346,7 @@ ggplot(testProbs, aes(d = as.numeric(testProbs$Outcome), m = Probs)) +
   geom_roc(n.cuts = 50, labels = FALSE, colour = "#FE9900") +
   style_roc(theme = theme_grey) +
   geom_abline(slope = 1, intercept = 0, size = 1.5, color = 'grey') +
-  labs(title = "ROC Curve - churnModel")
+  labs(title = "ROC Curve - Permit Model")
 
 ```
 ```{r}
@@ -349,7 +355,7 @@ rf_predictions <- predict(rf_model, newdata = test_data, type = "prob")
 rf_predictions <- ifelse(rf_predictions_prob[, "1"] >= 0.5, 1, 0)
 
 # Create dataframe for observed and predicted probabilities
-testProbs <- data.frame(obs = as.numeric(test_data$permit_22),
+testProbs <- data.frame(obs = test_data$permit_22,
                         pred = rf_predictions)
 
 # Plot density curves
@@ -365,6 +371,8 @@ ggplot(testProbs, aes(x = pred, fill = as.factor(obs))) +
   theme_minimal()
 
 ```
+
+
 # 4.Poisson regression
 Given septic permits for most parcels are relatively rare event, it is reasonable for most parcels to contain no crime events. So, Poisson Regression is estimated which is uniquely suited to modeling a count outcome of the number of permits, which is the variable called "permit_22". 
 ```{r Pisson Regression}
@@ -477,7 +485,7 @@ text(x = 0.5, y = overall_mean, labels = round(overall_mean, 4), pos = 4, col = 
 par(xpd=TRUE) # allow plotting outside the plot area
 legend("topright", 
        legend = c("Mean Absolute Error", "Overall Mean Absolute Error"), 
-       col = c("#559a90ff", "red"), 
+       col = c("#559a90ff", "black"), 
        lty = c(1, 2), 
        bty = "n")
 
