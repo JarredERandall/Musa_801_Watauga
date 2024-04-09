@@ -71,7 +71,7 @@ logistic_model <- glm(permit_22 ~ ., data = train_data%>%dplyr::select(-GlobalID
 summary(logistic_model)
 ```
 
-Significant predictors such as Slope_Max, Developed_High_Intensity, and Barren_Land were identified, indicating their strong influence on the probability of permit issuanceDespite achieving a model with certain significant predictors, challenges arose, notably the dataset's imbalance (only 0.05% of parcels having permits), which likely contributed to issues of overfitting and misleadingly high accuracy rates. 
+Significant predictors such as Slope_Max, Developed_High_Intensity, and Barren_Land were identified, indicating their strong influence on the probability of permit issuance. Despite achieving a model with certain significant predictors, challenges arose, notably the dataset's imbalance (only 0.05% of parcels having permits), which likely contributed to issues of overfitting and misleadingly high accuracy rates. 
 
 ```{r p_value of all features}
 # Extract coefficient estimates and p-values
@@ -245,15 +245,6 @@ accuracy <- mean(binary_predictions == test_data$permit_22)
 cat("Accuracy of the logistic regression model on the test data:", accuracy)
 ```
 
-Risk estimate; what will happen if you follow a predict that is wrong.
-- labor intensive to investigate a parcel: FP
-- How many parcels? Maybe TOP...? 
-
-We know that we could do ... but it might be terrible TP when
-FP will ....
-
-Framework for ... do not have hard threshold 
-
 
 ```{r}
 conf_matrix <- table(test_data$permit_22, binary_predictions)
@@ -375,7 +366,7 @@ ggplot(testProbs, aes(x = pred, fill = as.factor(obs))) +
 
 ```
 # 4.Poisson regression
-
+Given septic permits for most parcels are relatively rare event, it is reasonable for most parcels to contain no crime events. So, Poisson Regression is estimated which is uniquely suited to modeling a count outcome of the number of permits, which is the variable called "permit_22". 
 ```{r Pisson Regression}
 set.seed(123)
 
@@ -454,6 +445,15 @@ print(results_df)
 # Print the mean MAE value
 print(paste("Mean MAE across all folds:", mean_mae))
 ```
+To test the model better, we also did a 5-fold ross-validation.
+The MAE values obtained from the cross-validation process were as follows:
+Fold 1: 0.2663898
+Fold 2: 0.2630295
+Fold 3: 0.2678773
+Fold 4: 0.2749677
+Fold 5: 0.2743343
+
+Generally, lower MAE values indicate better model accuracy.
 
 ```{r}
 # Calculate the overall mean absolute error
