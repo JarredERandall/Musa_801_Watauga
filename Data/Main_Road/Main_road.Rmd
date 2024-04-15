@@ -1,0 +1,115 @@
+---
+title: "Main Road KNN Distance"
+author: "Yinan_Li"
+date: "2024-04-15"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r library, cache=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+library(RSocrata)
+library(viridis) 
+library(spatstat)
+library(spdep)
+library(FNN)
+library(grid)
+library(gridExtra)
+library(kableExtra)
+library(classInt)   # for KDE and ML risk class intervals
+library(mapview)
+library(FedData)
+library(tidyverse)
+library(tidycensus)
+library(sf)
+library(sp)
+library(dplyr)
+library(raster) 
+library(animation)
+library(rasterVis)
+library(RColorBrewer) 
+library(ggplot2)      
+library(colorspace)
+library(dplyr)
+library(tidyr)
+library(readr)
+library(sf)
+library(terra)
+library(kableExtra)
+library(reshape2)
+
+# dummy <- read.csv("/Users/alice/Downloads/landcover_legend.csv")
+# functions
+root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/"
+
+source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
+color_palette <- c("#e2a334", "#f9bf3e", "#fcd977", "#9ad7d2", "#74c1b9")
+```
+
+
+## Data Loading
+
+Load the Road Traffic Data from NCDOT website. The link is: https://connect.ncdot.gov/resources/State-Mapping/Documents/NCDOT_2022_Traffic_Segment_Shapefile_Description.zip
+
+```{r load_data, cache=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+boundary <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/GeoJSON/Boundary.geojson")
+parcel <- st_read("https://drive.google.com/uc?export=download&id=1z4HD0F2GHLBk6KKYbn8ABYXeZxEFK2AJ")
+main_road <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/GeoJSON/main_road.geojson")
+```
+
+```{r parcel_distance, echo=FALSE, message=FALSE, warning=FALSE}
+plot(main_road_h_traffic)
+```
+
+## Traffic Filter
+
+Filter out the roads with traffic equal to or higher than 2000.
+
+```{r filter_road, cache=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+# Based on the column 'AADT'
+main_road_h_traffic <- main_road[main_road$AADT >= 2000,]
+```
+
+```{r parcel_centroid, echo=FALSE, message=FALSE, warning=FALSE}
+# Calculate the centroid of each parcel
+parcel_centroids <- st_centroid(parcel)
+```
+
+```{r parcel_distance, echo=FALSE, message=FALSE, warning=FALSE}
+parcel_distance <- st_distance(parcel_centroids, main_road_h_traffic)
+nearest_distances <- apply(parcel_distance, 1, min)
+class(parcel_distance)
+class(nearest_distances)
+```
+
+```{r convert_df, echo=FALSE, message=FALSE, warning=FALSE}
+nearest_distances_df <- data.frame(GlobalID = parcel_centroids$GlobalID, nearest_distances)
+parcel_dist <- left_join(parcel, nearest_distances_df, by = "GlobalID")
+```
+
+```{r plot_distance_road, echo=FALSE, fig.show='hold'}
+plot_road <-ggplot() +
+      geom_sf(data = parcel_dist, aes(fill=nearest_distances), colour=NA) +
+  #geom_sf(data = parcel, fill = "transparent", colour = "red", size = 0.005) +  # Adjust the size here
+      scale_fill_viridis(name="Distance") +
+      labs(title="Distance to the Nearest Main Road") +
+      theme_void() 
+
+plot_road
+
+#ggsave("road.jpg", plot_road, dpi = 300)
+```
+
+```{r final_df, echo=FALSE, message=FALSE, warning=FALSE}
+# Only keep 'GlobalID' and 'nearest_distances' columns
+parcel_dist_final <- parcel_dist[,c("GlobalID", "nearest_distances")]
+
+# Drop geometry
+parcel_dist_final <- st_drop_geometry(parcel_dist_final)
+```
+
+```{r save_df, echo=FALSE, message=FALSE, warning=FALSE}
+write.csv(parcel_dist_final, "parcel_distance.csv", row.names = FALSE)
+```
