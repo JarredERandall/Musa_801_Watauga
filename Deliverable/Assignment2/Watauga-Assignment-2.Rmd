@@ -1050,17 +1050,6 @@ ggplot() +
   theme_void()
 ```
 
-```{r plot_natural_area_rating, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
-ggplot() +
-  geom_sf(data = boundary, fill = NA, color = "black") + 
-  geom_sf(data = natural_areas, aes(fill = C_RATING)) + 
-  scale_fill_manual(values = color_palette) + 
-  labs(title = "Watauga Natural Rating",
-       subtitle = "Year: 2022",
-       color = "Rating") +
-  theme_void()
-
-```
 
 ### (9) Spatial Lag
 ```{r}
@@ -1143,20 +1132,471 @@ ggplot() +
 
 ```
 
-# 3. Next Steps
+# 3. Modeling
 
-## 3.1 Feature Engineering
+For our modeling process, we attempted three different models: the logistic model (to calculate probabilities), Random Forest, and Poisson regression (permit number). We've encountered various issues, including overfitting and misleadingly high accuracy rates, which we attribute to our imbalanced dataset— initially only 0.05 percent of parcels have permits. To address this, we've tried removing parcels with slopes too steep for development and resampling by oversampling the instances with permits (randomly duplicating the 1’s), yet we still end up with similar challenges. Below, you will find the results of these three models to assist in deciding which model type is best to proceed with.
 
-Besides the features we have already extracted, we will also consider more economic features into our model. Based on the features we have, we will also do some feature engineering to create new features and join the data to parcel. For example, we're going to calculate the average, minimum and maximum slope of the parcel.
+## 1. Loading Data
+```{r}
+sample <- st_read('https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Resample/final_modeling.csv')
+resample <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Resample/final_modeling_noID.csv")
+```
+## 2.Logistic Modeling
+### 2.1 Building the model
+```{r change dataset as numeric data}
+sample <- sample %>%
+  mutate_if(~ !identical(., sample$GlobalID), as.numeric)
 
-After joining features with the parcels, we will try to test the variable correlations between the target variable (Number of Septic permits in each parcel) and the features. Based on the variable correlation significance, we will try to select the most important features for the model.
+sample <- na.omit(sample)
 
-## 3.2 Machine Learning Model
+```
+### Splitting into Training and Testing Set
 
-On the basis of the variables from the past 5 years we have, we will try to build a machine learning model to predict the number of septic permits in each parcel. We will try to use different models to predict the number of septic permits, such as linear regression, random forest, and gradient boosting. We will also try to use different feature selection methods to select the most important features for the model. Then we will compare the performance of different models and feature selection methods to find the best model for our prediction.
+The logistic regression model developed to predict permit issuance (permit_22) in Watauga County based on various environmental and land use characteristics encountered significant results, alongside challenges attributable to data imbalance. Key steps in the modeling process included data preparation (like converting permit_22 to a categorical variable and excluding non-relevant predictors), training the model on 80% of the dataset, and evaluating its coefficients and overall fit.
 
-Then, we plan to improve our baseline model with several different methods, such as hyper-parameter tuning, cross-validation, and ensemble learning. We will also try to use different metrics to evaluate the model performance, such as RMSE, MAE, and R-squared.
 
+```{r Logistic Modeling}
+# Set the seed for reproducibility
+set.seed(123)
+
+
+# Split the data into training and testing sets
+train_indices <- sample(1:nrow(sample), 0.8 * nrow(sample))
+train_data <- sample[train_indices, ]
+test_data <- sample[-train_indices, ]
+
+# Convert permit_22 to a factor variable
+train_data$permit_22 <- factor(train_data$permit_22)
+test_data$permit_22 <- factor(test_data$permit_22)
+
+# Train the logistic regression model
+logistic_model <- glm(permit_22 ~ ., data = train_data%>%dplyr::select(-GlobalID, -n_permit_22), family="binomial" (link="logit"))
+
+# Print summary of the model
+summary(logistic_model)
+```
+
+Significant predictors such as Slope_Max, Developed_High_Intensity, and Barren_Land were identified, indicating their strong influence on the probability of permit issuance. Despite achieving a model with certain significant predictors, challenges arose, notably the dataset's imbalance (only 0.05% of parcels having permits), which likely contributed to issues of overfitting and misleadingly high accuracy rates. 
+
+```{r p_value of all features}
+# Extract coefficient estimates and p-values
+coefficients <- summary(logistic_model)$coefficients
+
+# Remove intercept
+coefficients <- coefficients[-1, ]
+
+# Plot p-values with rotated labels and reduced font size
+barplot(coefficients[, 4], names.arg = rownames(coefficients),
+        ylim = c(0, 1), ylab = "p-value", col = "#559a90ff",
+        main = "P-values of Logistic Regression Coefficients",
+        las = 2, cex.axis = 0.8, cex.lab = 0.8)  # Adjust font size
+
+# Add horizontal line for p = 0.05
+abline(h = 0.05, col = "#e2a334ff", lty = 2)  # Add horizontal line at y = 0.05
+
+
+```
+### 2.2 Making Predictions &  metrics
+
+The model predicts at an accuracy rate of 90%, this accuracy rate is misleading because of the imbalanced dataset where 95% of the parcels in the dataset do not have a septic permit 
+
+```{r make predictions}
+test_predictions <- predict(logistic_model, newdata = test_data, type = "response")
+
+# Convert probabilities to binary predictions (0 or 1) using a threshold of 0.5
+binary_predictions <- ifelse(test_predictions >= 0.5, 1, 0)
+
+# Calculate accuracyd
+accuracy <- mean(binary_predictions == test_data$permit_22)
+cat("Accuracy of the logistic regression model on the test data:", accuracy)
+```
+
+
+The F1 score here is 0. This result suggests a  issue in our model performance, particularly in identifying the positive class (parcels with a septic permit) accurately. 
+```{r Sensitivity}
+# Calculate confusion matrix
+conf_matrix <- table(test_data$permit_22, binary_predictions)
+
+# Calculate precision, recall, and F1 score
+precision <- ifelse(sum(conf_matrix[, 2]) == 0, 0, conf_matrix[2, 2] / sum(conf_matrix[, 2]))
+recall <- ifelse(sum(conf_matrix[2, ]) == 0, 0, conf_matrix[2, 2] / sum(conf_matrix[2, ]))
+f1_score <- ifelse(precision + recall == 0, 0, 2 * precision * recall / (precision + recall))
+
+# Print F1 score
+cat("F1 score of the logistic regression model on the test data:", f1_score)
+```
+
+
+```{r testProb}
+testProbs <- data.frame(Outcome = as.factor(test_data$permit_22),
+                        Probs = test_predictions)
+head(testProbs)
+```
+
+```{r}
+testProbs <- 
+  testProbs %>%
+  mutate(predOutcome  = as.factor(ifelse(testProbs$Probs > 0.5 , 1, 0)))
+
+head(testProbs)
+```
+```{r}
+caret::confusionMatrix(testProbs$predOutcome, testProbs$Outcome, 
+                       positive = "1")
+```
+The Confusion Matrix shows a Sensitivity of 0%, indicating the model failed to correctly predict any of the actual positive cases, And a Specificity of Nearly 100%, showing the model is extremely good at identifying true negatives but at the cost of not detecting positives.
+
+
+```{r ROC Curve}
+library(plotROC)
+
+ggplot(testProbs, aes(d = as.numeric(testProbs$Outcome), m = Probs)) +
+  geom_roc(n.cuts = 50, labels = FALSE, colour = "#FE9900") +
+  style_roc(theme = theme_grey) +
+  geom_abline(slope = 1, intercept = 0, size = 1.5, color = 'grey') +
+  labs(title = "ROC Curve - Permit Model")
+```
+
+The model AUC is 0.6872 which implies that there is a roughly 68.72% chance that the model will rank a randomly chosen positive instance (actual permit granted) higher than a randomly chosen negative one (no permit).
+```{r AUC}
+library(pROC)
+
+# Assuming the logistic regression model is already fitted as 'logistic_model'
+
+# Predict probabilities on the test data
+predicted_probabilities <- predict(logistic_model, newdata = test_data, type = "response")
+
+# Calculate ROC curve
+roc_curve <- roc(test_data$permit_22, predicted_probabilities)
+
+# Calculate AUC
+auc_value <- auc(roc_curve)
+
+# Print AUC value
+print(auc_value)
+```
+
+There is a significant overlap between the two distributions, particularly around the lower probability scores, indicating that the model has difficulty distinguishing between Developed and Not Developed classes in many cases. We will try adjusting for optimal threshold. 
+
+```{r}
+# Convert permit_22 to numeric and store in a dataframe
+df <- data.frame(permit_numeric = as.numeric(test_data$permit_22))
+```
+
+
+```{r Model Distribution}
+# Predict probabilities on the test data
+predicted_probabilities <- predict(logistic_model, newdata = test_data, type = "response")
+
+# Create dataframe for observed and predicted probabilities
+roc_curve <- data.frame(obs = test_data$permit_22,
+                        pred = predicted_probabilities)
+
+# Plot density curves
+ggplot(roc_curve, aes(x = pred, fill = as.factor(obs))) + 
+  geom_density() +
+  facet_grid(obs ~ .) + 
+  xlab("Probability") +
+  ylab("Frequency") +
+  geom_vline(xintercept = 0.12) +
+  scale_fill_manual(values = c("#559a90ff", "#e2a334ff"),
+                    labels = c("Not Developed", "Developed"),
+                    name = "") +
+  theme_minimal()
+```
+
+### 2.3 Try to get the best threshold
+```{r}
+cost_benefit_table <-
+   testProbs %>%
+      count(predOutcome, Outcome) %>%
+      summarize(True_Negative = sum(n[predOutcome==0 & Outcome==0]),
+                True_Positive = sum(n[predOutcome==1 & Outcome==1]),
+                False_Negative = sum(n[predOutcome==0 & Outcome==1]),
+                False_Positive = sum(n[predOutcome==1 & Outcome==0])) %>%
+       gather(Variable, Count) %>%
+    bind_cols(data.frame(Description = c(
+              "We predicted no churn and did not send a mailer",
+              "We predicted churn and sent the mailer",
+              "We predicted no churn and the customer churned",
+              "We predicted churn and the customer did not churn")))
+```
+
+The logistic regression does not work well for the dataset since there is no true positive for it, which is bad for it.
+
+
+Then try to improve the threshold
+```{r}
+whichThreshold <- 
+  iterateThresholds(
+     data=testProbs, observedClass = Outcome, predictedProbs = Probs)
+
+whichThreshold[1:5,]
+```
+adjusting the threshold for predicting a positive case from the default 0.5 to 0.12 would result in the best balance between capturing true positives and maintaining accuracy.
+
+```{r}
+ggplot(whichThreshold, aes(x = Rate_TP, y = Accuracy)) +
+  geom_point(color = "#559a90ff") +  # Set point color to red
+  geom_line(color = "#559a90ff") +    # Set line color to red
+  labs(x = "Rate_TP", y = "Accuracy", title = "Relationship between RateTP and Accuracy")
+
+```
+Try when Rate_TP = 0.5, threshold = 0.12
+
+
+```{r}
+test_predictions <- predict(logistic_model, newdata = test_data, type = "response")
+
+# Convert probabilities to binary predictions (0 or 1) using a threshold of 0.5
+binary_predictions <- ifelse(test_predictions >= 0.12, 1, 0)
+
+# Calculate accuracy
+accuracy <- mean(binary_predictions == test_data$permit_22)
+cat("Accuracy of the logistic regression model on the test data:", accuracy)
+```
+
+
+```{r}
+conf_matrix <- table(test_data$permit_22, binary_predictions)
+
+# Get the true positive (TP) count
+TP <- conf_matrix[2, 2]
+
+# Get the total number of actual positive cases
+actual_positive <- sum(test_data$permit_22 == 1)
+
+# Calculate the true positive rate (TPR) or sensitivity
+TP_rate <- TP / actual_positive
+
+# Print the true positive rate
+cat("True Positive Rate (TPR) of the logistic regression model:", TP_rate)
+```
+
+
+## 3.Random forest model
+When running a Random Forest Model we end of with an extremely overfitted model with a accuracy and F1 of 1. 
+```{r Rf model building}
+library(randomForest)
+
+# Train the Random Forest model with tuned hyperparameters
+rf_model <- randomForest(permit_22 ~ ., data = train_data%>%dplyr::select(-GlobalID, -n_permit_22),
+                         ntree = 500, mtry = sqrt(ncol(train_data)))
+
+# Make predictions on the test data
+rf_predictions_prob <- predict(rf_model, newdata = test_data, type = "prob")
+```
+
+### 3.2 Some metrics
+```{r Accuracy of the RF model}
+# Convert predicted probabilities to class predictions
+rf_predictions <- ifelse(rf_predictions_prob[, "1"] >= 0.5, 1, 0)
+
+# Calculate accuracy
+accuracy <- mean(rf_predictions == test_data$permit_22)
+
+# Print the accuracy
+cat("Accuracy of the Random Forest model on the test data:", accuracy)
+
+```
+
+
+```{r f1 score}
+# Calculate confusion matrix
+conf_matrix <- table(test_data$permit_22, rf_predictions )
+
+# Calculate precision, recall, and F1 score
+precision <- ifelse(sum(conf_matrix[, 2]) == 0, 0, conf_matrix[2, 2] / sum(conf_matrix[, 2]))
+recall <- ifelse(sum(conf_matrix[2, ]) == 0, 0, conf_matrix[2, 2] / sum(conf_matrix[2, ]))
+f1_score <- ifelse(precision + recall == 0, 0, 2 * precision * recall / (precision + recall))
+
+# Print F1 score
+cat("F1 score of the Random Forest model on the test data:", f1_score)
+
+```
+
+
+```{r TPR}
+# Get the true positive (TP) count
+TP <- conf_matrix[2, 2]
+
+# Get the total number of actual positive cases
+actual_positive <- sum(test_data$permit_22 == 1)
+
+# Calculate the true positive rate (TPR) or sensitivity
+TPR <- TP / actual_positive
+
+# Print the true positive rate
+cat("True Positive Rate (TPR) of the Random Forest model:", TPR)
+```
+
+```{r get the metrics table}
+testProbs <- data.frame(Outcome = as.factor(test_data$permit_22),
+                        Probs = rf_predictions)
+testProbs <- 
+  testProbs %>%
+  mutate(predOutcome  = as.factor(ifelse(testProbs$Probs > 0.5 , 1, 0)))
+
+head(testProbs)
+```
+
+```{r}
+caret::confusionMatrix(testProbs$predOutcome, testProbs$Outcome, 
+                       positive = "1")
+```
+
+
+```{r ROC}
+ggplot(testProbs, aes(d = as.numeric(testProbs$Outcome), m = Probs)) +
+  geom_roc(n.cuts = 50, labels = FALSE, colour = "#FE9900") +
+  style_roc(theme = theme_grey) +
+  geom_abline(slope = 1, intercept = 0, size = 1.5, color = 'grey') +
+  labs(title = "ROC Curve - Permit Model")
+
+```
+```{r}
+# Predict probabilities on the test data
+rf_predictions <- predict(rf_model, newdata = test_data, type = "prob")
+rf_predictions <- ifelse(rf_predictions_prob[, "1"] >= 0.5, 1, 0)
+
+# Create dataframe for observed and predicted probabilities
+testProbs <- data.frame(obs = test_data$permit_22,
+                        pred = rf_predictions)
+
+# Plot density curves
+ggplot(testProbs, aes(x = pred, fill = as.factor(obs))) + 
+  geom_density() +
+  facet_grid(obs ~ .) + 
+  xlab("Probability") +
+  ylab("Frequency") +
+  geom_vline(xintercept = 0.5) +
+  scale_fill_manual(values = c("#559a90ff", "#e2a334ff"),
+                    labels = c("Not Developed", "Developed"),
+                    name = "") +
+  theme_minimal()
+
+```
+
+
+## 4.Poisson regression
+Given septic permits for most parcels are relatively rare event, it is reasonable for most parcels to contain no crime events. So, Poisson Regression is estimated which is uniquely suited to modeling a count outcome of the number of permits, which is the variable called "permit_22". 
+```{r Pisson Regression}
+set.seed(123)
+
+# Split the data into training and testing sets
+train_indices <- sample(1:nrow(sample), 0.8 * nrow(sample))
+train_data <- sample[train_indices, ]
+test_data <- sample[-train_indices, ]
+
+# Convert permit_22 to a factor variable
+train_data$permit_22 <- factor(train_data$permit_22)
+test_data$permit_22 <- factor(test_data$permit_22)
+
+
+poisson_model <- glm(n_permit_22 ~ ., data = train_data%>%dplyr::select(-GlobalID, -permit_22), family = "poisson")
+
+# Summary of the model
+summary(poisson_model)
+```
+
+The Poisson models MAE of 0.261 indicates that on average the model the predictions of the model ate about 0.261 units off from the actual values. 
+```{r model MAE}
+# Assuming you have a test dataset called test_data
+
+# Making predictions on test data
+predictions <- predict(poisson_model, newdata = test_data, type = "response")
+
+# Removing missing values from both predictions and actual values
+predictions <- predictions[!is.na(predictions)]
+actual_values <- test_data$n_permit_22[!is.na(predictions)]
+
+# Calculating mean absolute error
+mae <- mean(abs(predictions - actual_values))
+
+# Printing mean absolute error
+print(paste("Mean Absolute Error:", mae))
+
+```
+
+```{r}
+k <- 5
+
+# Initialize an empty dataframe to store results
+results_df <- data.frame(Fold = numeric(),
+                         MAE = numeric())
+
+# Perform cross-validation
+for (i in 1:k) {
+  # Create indices for cross-validation folds
+  set.seed(123)  # Set seed for reproducibility
+  folds <- sample(1:k, nrow(sample), replace = TRUE)
+  
+  # Split the data into training and test sets
+  test_indices <- which(folds == i)
+  train_data <- sample[-test_indices, ]
+  test_data <- sample[test_indices, ]
+  
+  # Fit the Poisson regression model on the training data
+  poisson_model <- glm(n_permit_22 ~ ., data = train_data %>% dplyr::select(-GlobalID, -permit_22), family = "poisson")
+  
+  # Make predictions on the test data
+  predictions <- predict(poisson_model, newdata = test_data, type = "response")
+  
+  # Calculate mean absolute error for this fold
+  fold_mae <- mean(abs(predictions - test_data$n_permit_22))
+  
+  # Store results in the dataframe
+  results_df <- rbind(results_df, data.frame(Fold = i, MAE = fold_mae))
+}
+
+# Calculate the mean value of MAE across all folds
+mean_mae <- mean(results_df$MAE)
+
+# Print the dataframe
+print(results_df)
+
+# Print the mean MAE value
+print(paste("Mean MAE across all folds:", mean_mae))
+```
+To test the model better, we also did a 5-fold ross-validation.
+The MAE values obtained from the cross-validation process were as follows:
+Fold 1: 0.2663898
+Fold 2: 0.2630295
+Fold 3: 0.2678773
+Fold 4: 0.2749677
+Fold 5: 0.2743343
+
+Generally, lower MAE values indicate better model accuracy.
+
+```{r}
+# Calculate the overall mean absolute error
+overall_mean <- mean(results_df$MAE)
+
+# Plot the results stored in results_df
+barplot(results_df$MAE, 
+        names.arg = results_df$Fold,
+        main = "Mean Absolute Errors for Each Fold",
+        xlab = "Fold",
+        ylab = "Mean Absolute Error",
+        col = "#559a90ff",
+        border = "black",
+        ylim = c(0, 0.4))
+
+# Add mean line
+abline(h = overall_mean, col = "black", lty = 2)
+text(x = 0.5, y = overall_mean, labels = round(overall_mean, 4), pos = 4, col = "black")
+
+# Calculate the position of the legend
+par(xpd=TRUE) # allow plotting outside the plot area
+legend("topright", 
+       legend = c("Mean Absolute Error", "Overall Mean Absolute Error"), 
+       col = c("#559a90ff", "black"), 
+       lty = c(1, 2), 
+       bty = "n")
+
+# Reset the plotting area
+par(xpd=FALSE)
+```
 ## 3.3 Interactive Application
 
 The last step we plan to do is to develop an interactive dashboard to visualize and enable the clients to interact with the data more easily. In the dashboard, we will include the data dashboard and the machine learning model prediction result on the map as suggestions for Watauga's future development.
