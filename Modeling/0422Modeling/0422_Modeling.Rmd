@@ -1,0 +1,739 @@
+---
+title: "Modeling"
+output: html_document
+date: "2024-03-25"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,  message = FALSE, warning = FALSE)
+
+library(tidyverse)
+library(sf)
+library(RSocrata)
+library(viridis)
+library(spatstat)
+library(raster)
+library(spdep)
+library(FNN)
+library(grid)
+library(gridExtra)
+library(knitr)
+library(kableExtra)
+library(tidycensus)
+library(classInt)   # for KDE and ML risk class intervals
+library(mapview)
+# functions
+root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/"
+source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
+```
+
+For our modeling process, we attempted three different models: the logistic model (to calculate probabilities), Random Forest, and Poisson regression (permit number). We've encountered various issues, including overfitting and misleadingly high accuracy rates, which we attribute to our imbalanced dataset—only 0.05 percent of parcels have permits. To address this, we've tried removing parcels with slopes too steep for development and resampling by oversampling the instances with permits (randomly duplicating the 1’s), yet we still end up with similar challenges. Below, you will find the results of these three models to assist in deciding which model type is best to proceed with.
+
+# Start Modeling
+
+## 1. Loading Data
+```{r}
+filter_no_resample <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Resample/0422_data/data_filtered.csv")
+
+df_original <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Resample/0422_data/original_dataset_47265.csv")
+
+resample <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Resample/0422_data/resample.csv")
+
+parcel = st_read('https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Data/natural/parcel.geojson')
+```
+
+
+```{r change dataset as numeric data}
+resample <- resample %>%
+  mutate_if(~ !identical(., resample$GlobalID), as.numeric)
+
+resample <- na.omit(resample)
+```
+
+# 2.Logistic Modeling
+## 2.1 Building the model
+
+## Splitting into Training and Testing Set
+
+The logistic regression model developed to predict permit issuance (permit_22) in Watauga County based on various environmental and land use characteristics encountered significant results, alongside challenges attributable to data imbalance. Key steps in the modeling process included data preparation (like converting permit_22 to a categorical variable and excluding non-relevant predictors), training the model on 80% of the dataset, and evaluating its coefficients and overall fit.
+
+
+```{r Logistic Modeling}
+# Set the seed for reproducibility
+set.seed(123)
+
+
+# Split the data into training and testing sets
+train_indices <- sample(1:nrow(sample), 0.8 * nrow(sample))
+train_data <- sample[train_indices, ]
+test_data <- sample[-train_indices, ]
+
+# Convert permit_22 to a factor variable
+train_data$permit_22 <- factor(train_data$permit_22)
+test_data$permit_22 <- factor(test_data$permit_22)
+
+# Train the logistic regression model
+logistic_model <- glm(permit_22 ~ ., data = train_data%>%dplyr::select(-GlobalID, -n_permit_22), family="binomial" (link="logit"))
+
+# Print summary of the model
+summary(logistic_model)
+```
+
+
+Significant predictors such as Slope_Max, Developed_High_Intensity, and Barren_Land were identified, indicating their strong influence on the probability of permit issuance. Despite achieving a model with certain significant predictors, challenges arose, notably the dataset's imbalance (only 0.05% of parcels having permits), which likely contributed to issues of overfitting and misleadingly high accuracy rates. 
+
+```{r p_value of all features}
+# Extract coefficient estimates and p-values
+coefficients <- summary(logistic_model)$coefficients
+
+# Remove intercept
+coefficients <- coefficients[-1, ]
+
+# Plot p-values with rotated labels and reduced font size
+barplot(coefficients[, 4], names.arg = rownames(coefficients),
+        ylim = c(0, 1), ylab = "p-value", col = "#559a90ff",
+        main = "P-values of Logistic Regression Coefficients",
+        las = 2, cex.axis = 0.8, cex.lab = 0.8)  # Adjust font size
+
+# Add horizontal line for p = 0.05
+abline(h = 0.05, col = "#e2a334ff", lty = 2)  # Add horizontal line at y = 0.05
+
+
+```
+## 2.2 Making Predictions &  metrics
+
+The model predicts at an accuracy rate of 90%, this accuracy rate is misleading because of the imbalanced dataset where 95% of the parcels in the dataset do not have a septic permit 
+
+```{r make predictions}
+test_predictions <- predict(logistic_model, newdata = test_data, type = "response")
+
+# Convert probabilities to binary predictions (0 or 1) using a threshold of 0.5
+binary_predictions <- ifelse(test_predictions >= 0.5, 1, 0)
+
+# Calculate accuracyd
+accuracy <- mean(binary_predictions == test_data$permit_22)
+cat("Accuracy of the logistic regression model on the test data:", accuracy)
+```
+
+```{r}
+# Make predictions on the test data
+predicted_probabilities <- predict(logistic_model, newdata = test_data, type = "response")
+
+# Set a threshold for classification (e.g., 0.5)
+threshold <- 0.5
+
+# Convert predicted probabilities to binary predictions based on the threshold
+predicted_classes <- ifelse(predicted_probabilities >= threshold, 1, 0)
+
+# Calculate confusion matrix
+conf_matrix <- table(test_data$permit_22, predicted_classes)
+
+# Extract True Positive (TP) and False Negative (FN) from the confusion matrix
+TP <- conf_matrix[2, 2]  # True Positives
+FN <- conf_matrix[2, 1]  # False Negatives
+
+# Calculate True Positive Rate (TPR)
+TPR <- TP / (TP + FN)
+
+# Print True Positive Rate
+cat("True Positive Rate (TPR):", TPR, "\n")
+```
+
+The F1 score here is 0. This result suggests a  issue in our model performance, particularly in identifying the positive class (parcels with a septic permit) accurately. 
+```{r Sensitivity}
+# Calculate confusion matrix
+conf_matrix <- table(test_data$permit_22, binary_predictions)
+
+# Calculate precision, recall, and F1 score
+precision <- ifelse(sum(conf_matrix[, 2]) == 0, 0, conf_matrix[2, 2] / sum(conf_matrix[, 2]))
+recall <- ifelse(sum(conf_matrix[2, ]) == 0, 0, conf_matrix[2, 2] / sum(conf_matrix[2, ]))
+f1_score <- ifelse(precision + recall == 0, 0, 2 * precision * recall / (precision + recall))
+
+# Print F1 score
+cat("F1 score of the logistic regression model on the test data:", f1_score)
+```
+
+
+```{r testProb}
+testProbs <- data.frame(Outcome = as.factor(test_data$permit_22),
+                        Probs = test_predictions)
+head(testProbs)
+```
+
+```{r}
+testProbs <- 
+  testProbs %>%
+  mutate(predOutcome  = as.factor(ifelse(testProbs$Probs > 0.5 , 1, 0)))
+
+head(testProbs)
+```
+```{r}
+caret::confusionMatrix(testProbs$predOutcome, testProbs$Outcome, 
+                       positive = "1")
+```
+The Confusion Matrix shows a Sensitivity of 0%, indicating the model failed to correctly predict any of the actual positive cases, And a Specificity of Nearly 100%, showing the model is extremely good at identifying true negatives but at the cost of not detecting positives.
+
+
+```{r ROC Curve}
+library(plotROC)
+
+ggplot(testProbs, aes(d = as.numeric(testProbs$Outcome), m = Probs)) +
+  geom_roc(n.cuts = 50, labels = FALSE, colour = "#FE9900") +
+  style_roc(theme = theme_grey) +
+  geom_abline(slope = 1, intercept = 0, size = 1.5, color = 'grey') +
+  labs(title = "ROC Curve - Permit Model")
+```
+
+The model AUC is 0.6872 which implies that there is a roughly 68.72% chance that the model will rank a randomly chosen positive instance (actual permit granted) higher than a randomly chosen negative one (no permit).
+```{r AUC}
+library(pROC)
+
+# Assuming the logistic regression model is already fitted as 'logistic_model'
+
+# Predict probabilities on the test data
+predicted_probabilities <- predict(logistic_model, newdata = test_data, type = "response")
+
+# Calculate ROC curve
+roc_curve <- roc(test_data$permit_22, predicted_probabilities)
+
+# Calculate AUC
+auc_value <- auc(roc_curve)
+
+# Print AUC value
+print(auc_value)
+```
+
+There is a significant overlap between the two distributions, particularly around the lower probability scores, indicating that the model has difficulty distinguishing between Developed and Not Developed classes in many cases. We will try adjusting for optimal threshold. 
+
+```{r}
+# Convert permit_22 to numeric and store in a dataframe
+df <- data.frame(permit_numeric = as.numeric(test_data$permit_22))
+```
+
+
+```{r Model Distribution}
+# Predict probabilities on the test data
+predicted_probabilities <- predict(logistic_model, newdata = test_data, type = "response")
+
+# Create dataframe for observed and predicted probabilities
+roc_curve <- data.frame(obs = test_data$permit_22,
+                        pred = predicted_probabilities)
+
+# Plot density curves
+ggplot(roc_curve, aes(x = pred, fill = as.factor(obs))) + 
+  geom_density() +
+  facet_grid(obs ~ .) + 
+  xlab("Probability") +
+  ylab("Frequency") +
+  geom_vline(xintercept = 0.12) +
+  scale_fill_manual(values = c("#559a90ff", "#e2a334ff"),
+                    labels = c("Not Developed", "Developed"),
+                    name = "") +
+  theme_minimal()
+```
+
+## 2.3 Try to get the best threshold
+```{r}
+cost_benefit_table <-
+   testProbs %>%
+      count(predOutcome, Outcome) %>%
+      summarize(True_Negative = sum(n[predOutcome==0 & Outcome==0]),
+                True_Positive = sum(n[predOutcome==1 & Outcome==1]),
+                False_Negative = sum(n[predOutcome==0 & Outcome==1]),
+                False_Positive = sum(n[predOutcome==1 & Outcome==0])) %>%
+       gather(Variable, Count) %>%
+    bind_cols(data.frame(Description = c(
+              "We predicted no churn and did not send a mailer",
+              "We predicted churn and sent the mailer",
+              "We predicted no churn and the customer churned",
+              "We predicted churn and the customer did not churn")))
+```
+
+The logistic regression does not work well for the dataset since there is no true positive for it, which is bad for it.
+
+
+Then try to improve the threshold
+```{r}
+whichThreshold <- 
+  iterateThresholds(
+     data=testProbs, observedClass = Outcome, predictedProbs = Probs)
+
+whichThreshold[1:5,]
+```
+adjusting the threshold for predicting a positive case from the default 0.5 to 0.12 would result in the best balance between capturing true positives and maintaining accuracy.
+
+```{r}
+ggplot(whichThreshold, aes(x = Rate_TP, y = Accuracy)) +
+  geom_point(color = "#559a90ff") +  # Set point color to red
+  geom_line(color = "#559a90ff") +    # Set line color to red
+  labs(x = "Rate_TP", y = "Accuracy", title = "Relationship between RateTP and Accuracy")
+
+```
+Try when Rate_TP = 0.5, threshold = 0.25
+
+
+```{r}
+test_predictions <- predict(logistic_model, newdata = test_data, type = "response")
+
+# Convert probabilities to binary predictions (0 or 1) using a threshold of 0.5
+binary_predictions <- ifelse(test_predictions >= 0.25, 1, 0)
+
+# Calculate accuracy
+accuracy <- mean(binary_predictions == test_data$permit_22)
+cat("Accuracy of the logistic regression model on the test data:", accuracy)
+```
+
+
+```{r}
+conf_matrix <- table(test_data$permit_22, binary_predictions)
+
+# Get the true positive (TP) count
+TP <- conf_matrix[2, 2]
+
+# Get the total number of actual positive cases
+actual_positive <- sum(test_data$permit_22 == 1)
+
+# Calculate the true positive rate (TPR) or sensitivity
+TP_rate <- TP / actual_positive
+
+# Print the true positive rate
+cat("True Positive Rate (TPR) of the logistic regression model:", TP_rate)
+```
+
+
+# 3.Random forest model
+When running a Random Forest Model we end of with an extremely overfitted model with a accuracy and F1 of 1. 
+
+## 3.1 Start with a try
+```{r Rf model building}
+library(randomForest)
+
+# Train the Random Forest model with tuned hyperparameters
+rf_model <- randomForest(permit_22 ~ ., data = train_data%>%dplyr::select(-GlobalID, -n_permit_22),
+                         ntree = 500, mtry = sqrt(ncol(train_data)))
+
+# Make predictions on the test data
+rf_predictions_prob <- predict(rf_model, newdata = test_data, type = "prob")
+```
+
+
+```{r}
+rf_predictions <- predict(rf_model, newdata = test_data, type = "response")
+```
+
+
+```{r}
+#install.packages("ROCR")
+library(ROCR)
+
+# Create a prediction object for the positive class (permit_22 = 1)
+pred <- prediction(rf_predictions_prob[, "1"], test_data$permit_22)
+
+# Create a performance object to compute ROC curve
+perf <- performance(pred, "tpr", "fpr")
+
+# Plot ROC curve
+plot(perf, col = "orange", main = "ROC Curve", lwd = 2)
+
+# Add a diagonal reference line for random classifier
+abline(a = 0, b = 1, lty = 2, col = "grey")
+
+# Add legend
+legend("bottomright", legend = c("ROC Curve", "Random Classifier"), col = c("orange", "grey"), lwd = 2, lty = c(1, 2))
+```
+
+## 3.2 Refined Model (MOST IMPORTANT THIS TIME)
+
+### !!!Try to eliminate more features 
+
+
+```{r}
+refined_data <- resample%>%dplyr::select(-GlobalID,-n_permit_22)
+```
+
+
+```{r}
+data_scaled <- refined_data
+
+# Standardize all columns except permit_22
+data_scaled[, names(data_scaled) != "permit_22"] <- scale(data_scaled[, names(data_scaled) != "permit_22"])
+```
+
+```{r}
+# Identify the index of the 'permit_22' column
+permit_22_index <- which(names(data_scaled) == "permit_22")
+
+# Reorder the columns with 'permit_22' as the first column
+data_scaled <- data_scaled[, c(permit_22_index, setdiff(1:ncol(data_scaled), permit_22_index))]
+
+```
+
+```{r corr_matrix}
+library(ggcorrplot)
+
+# Compute the correlation matrix
+cor_matrix <- round(cor(data_scaled), 1)
+
+# Plot the correlation matrix
+plot <- ggcorrplot(
+  cor_matrix, 
+  p.mat = cor_pmat(data_scaled),
+  colors = c("#25CB10", "white", "#FA7800"),
+  type = "lower",
+  insig = "blank"
+) +  
+  labs(title = "Correlation across numeric variables")+
+   theme(
+    axis.text.x = element_text(size = 5),  # Adjust x-axis label size
+    axis.text.y = element_text(size = 5)   # Adjust y-axis label size
+  )
+
+plot
+
+# Export the plot to a file
+ggsave("correlation_matrix.png", plot, width = 10, height = 8, dpi = 300)
+```
+
+
+```{r p-value}
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+
+# Initialize vectors to store results
+correlations <- numeric()
+p_values <- numeric()
+# Exclude both 'permit_22' and 'YRBUILT' from the list of variables
+variables <- names(data_scaled)[!names(data_scaled) %in% c("permit_22", "YRBUILT")]
+
+# Loop through columns and compute correlation test with 'permit_22'
+for (var in variables) {
+  test_result <- cor.test(data_scaled[[var]], data_scaled$permit_22, method = "pearson", use = "complete.obs")
+  correlations <- c(correlations, test_result$estimate)
+  p_values <- c(p_values, test_result$p.value)
+}
+
+# Combine results into a dataframe
+results_df <- data.frame(
+  Variable = variables,
+  Correlation = correlations,
+  P_Value = p_values
+)
+
+# Order dataframe by p-value, largest to smallest for plotting
+results_df <- results_df %>%
+  arrange(desc(P_Value))
+
+# Plot using ggplot2
+plot_corr <- ggplot(results_df, aes(x = reorder(Variable, -P_Value), y = Correlation, fill = -log10(P_Value))) +
+  geom_bar(stat = "identity") +
+  coord_flip() +  # Make the bar plot horizontal
+  scale_fill_continuous(name = "-log10(P-value)", low = "red", high = "blue") +
+  theme_minimal() +
+  xlab("Variable") +
+  ylab("Correlation with permit_22") +
+  ggtitle("Correlation of Variables with permit_22 by Significance (Least to Most)")
+
+# Print the plot
+plot_corr
+
+# Export the plot to a file
+ggsave("correlation.png", plot_corr, width = 10, height = 8, dpi = 300)
+```
+
+!! should add globalid back to get the geometry for visualization!!
+```{r choose features}
+# Include 16 features into the model
+model_data <- resample %>%
+  dplyr::select(permit_22, permit_17, permit_17.nn_3, permit_17.nn_4, permit_17.nn_5, Slope_Ave, Slope_Max, Dist_Flowline, Developed_Medium_Intensity, Pasture_Hay, Dist_Road, Developed_High_Intensity, Developed_Low_Intensity, Developed_Open_Space, inflation17, area) %>%
+  dplyr::rename(
+    permit = permit_22,
+    permit_lag = permit_17,
+    permit_lag.nn_3 = permit_17.nn_3,
+    permit_lag.nn_4 = permit_17.nn_4,
+    permit_lag.nn_5 = permit_17.nn_5,
+    property_value = inflation17
+  )
+```
+
+```{r}
+# Split the data into training and testing sets
+train_indices <- sample(1:nrow(model_data), 0.8 * nrow(model_data))
+train_data <- model_data[train_indices, ]
+test_data <- model_data[-train_indices, ]
+
+# Convert ‘permit’ to a factor variable
+train_data$permit <- factor(train_data$permit)
+test_data$permit <- factor(test_data$permit)
+```
+
+```{r}
+# Standardize the predictor variables in the training set
+train_data_scaled <- train_data  # Create a copy of the training data
+train_data_scaled[, -which(names(train_data_scaled) == "permit")] <- scale(train_data_scaled[, -which(names(train_data_scaled) == "permit")])
+
+# Standardize the predictor variables in the testing set
+test_data_scaled <- test_data  # Create a copy of the testing data
+test_data_scaled[, -which(names(test_data_scaled) == "permit")] <- scale(test_data_scaled[, -which(names(test_data_scaled) == "permit")])
+```
+
+```{r}
+library(randomForest)
+
+# Define grid of hyperparameters to search
+ntrees <- c(1000, 1500)
+mtrys <- c(3,6,9)
+min_node_sizes <- c(1000,1500)
+
+# Create an empty dataframe to store results
+results <- data.frame(ntree = integer(),
+                      mtry = integer(),
+                      min_node_size = integer(),
+                      accuracy = numeric(),
+                      false_negative_rate = numeric())
+
+# Perform grid search
+for (ntree in ntrees) {
+  for (mtry in mtrys) {
+    for (min_node_size in min_node_sizes) {
+      # Fit random forest model with current hyperparameters
+      rf_model <- randomForest(permit ~ ., data = train_data_scaled,
+                               ntree = ntree, mtry = mtry, min.node.size = min_node_size)
+      
+      # Make predictions on the test data
+      rf_predictions <- predict(rf_model, newdata = test_data_scaled)
+      
+      # Calculate accuracy
+      accuracy <- mean(rf_predictions == test_data_scaled$permit)
+      
+      # Calculate false negative rate
+      actual_positives <- sum(test_data_scaled$permit == 1)
+      false_negatives <- sum(rf_predictions != test_data_scaled$permit & test_data$permit == 1)
+      false_negative_rate <- false_negatives / actual_positives
+      
+      # Store results
+      results <- rbind(results, data.frame(ntree = ntree, mtry = mtry, min_node_size = min_node_size, accuracy = accuracy, false_negative_rate = false_negative_rate))
+    }
+  }
+}
+
+# Find the best hyperparameters based on accuracy
+best_params <- results[which.max(results$accuracy), ]
+print(best_params)
+```
+
+```{r}
+best_ntree <- best_params$ntree
+best_mtry <- best_params$mtry
+best_min_node_size <- best_params$min_node_size
+
+# Fit the best model with the selected hyperparameters
+best_rf_model <- randomForest(permit ~ ., data = train_data_scaled,
+                               ntree = best_ntree, mtry = best_mtry, min.node.size = best_min_node_size)
+```
+
+```{r}
+library(caret)
+
+# Make predictions on the test data
+rf_predictions <- predict(best_rf_model, newdata = test_data_scaled)
+
+# Construct the confusion matrix
+conf_matrix <- confusionMatrix(data = rf_predictions, reference = test_data_scaled$permit)
+
+print(conf_matrix)
+```
+
+
+```{r}
+library(caret)
+
+# Make predictions on the test data
+rf_predictions <- predict(best_rf_model, newdata = test_data_scaled)
+
+# Construct the confusion matrix
+conf_matrix <- confusionMatrix(data = rf_predictions, reference = test_data_scaled$permit)
+
+# Get the confusion matrix as a table
+conf_table <- conf_matrix$table
+
+# Extract True Positives (TP), False Negatives (FN)
+TP <- conf_table[2, 2]  # Row 2, Column 2
+FN <- conf_table[1, 2]  # Row 1, Column 2
+
+# Calculate True Positive Rate (TPR) and False Negative Rate (FNR)
+TPR <- TP / (TP + FN)
+FNR <- FN / (TP + FN)
+
+# Print TPR and FNR
+print(paste("True Positive Rate (TPR):", TPR))
+print(paste("False Negative Rate (FNR):", FNR))
+```
+
+
+# 4. Predict for 2027
+```{r load_2022_data}
+inflation <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Data/parcel_w_inflation.csv")
+permit_nn <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Data/PERMIT_SPATIAL_LAG/parcel_spatial_lag.csv")
+
+joined_filtered_df <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Resample/0422_data/joined_filtered_df.csv")
+```
+
+```{r merge_22_data}
+# Join the inflation 2022 data to the resampled dataset
+df_22 <- joined_filtered_df %>%
+  left_join(dplyr::select(inflation, c("GlobalID", inflation22)), by = "GlobalID")
+
+# Join the 2022 septic permit spatial lag data to the resampled dataset
+df_22 <- df_22 %>%
+  left_join(dplyr::select(permit_nn, GlobalID, permit_22.nn_3, permit_22.nn_4, permit_22.nn_5), by = "GlobalID")
+```
+
+```{r convert_num_df_22_data}
+df_22 <- df_22 %>%
+  mutate_if(~ !identical(., df_22$GlobalID), as.numeric)
+
+df_22 <- na.omit(df_22)
+```
+
+
+```{r predict_data}
+predict_data <- df_22 %>%
+  dplyr::select(GlobalID, permit_22, permit_22.nn_3, permit_22.nn_4, permit_22.nn_5, Slope_Ave, Slope_Max, Dist_Flowline, Developed_Medium_Intensity, Pasture_Hay, Dist_Road, Developed_High_Intensity, Developed_Low_Intensity, Developed_Open_Space, inflation22, area) %>%
+  dplyr::rename(
+    permit_lag = permit_22,
+    permit_lag.nn_3 = permit_22.nn_3,
+    permit_lag.nn_4 = permit_22.nn_4,
+    permit_lag.nn_5 = permit_22.nn_5,
+    property_value = inflation22
+  )
+
+write.csv(predict_data, "predict_data.csv")
+```
+
+```{r}
+df_no_id <- dplyr::select(predict_data, -GlobalID)
+
+# Standardize all columns in the predict data
+scaled_pred_df <- scale(df_no_id)
+```
+
+```{r predict}
+rf_predictions <- predict(best_rf_model, newdata = scaled_pred_df, type = "prob")
+predictions_result <- as.data.frame(rf_predictions)
+```
+
+```{r predict_data}
+result_data <- predict_data
+result_data$"Dvpt_Prob" <- predictions_result$`1`
+```
+
+```{r}
+parcelid <- parcel%>%dplyr::select("GlobalID", "PARCELID","geometry")
+```
+
+
+```{r}
+# Convert the 'area' column unit to acre
+result_data$area_acre <- result_data$area / 43560
+```
+
+
+```{r}
+merged <- merge(result_data, parcelid, by = "GlobalID", all.x = TRUE)
+```
+
+```{r}
+st_write(merged, "prediction_0422.geojson", driver = "GeoJSON")
+```
+
+``` {r}
+# Convert 'merged_data' to an sf object
+merged_data_sf <- st_read("E:/UPenn/24Spring/MUSA_Practicum/Modeling/0422/prediction_0422.geojson")
+```
+
+
+```{r plot_prediction}
+library(scales)
+
+plot_dvpt_prob <- ggplot() +
+  geom_sf(data = merged_data_sf, aes(fill=Dvpt_Prob), colour=NA) +
+  scale_fill_gradientn(colors=c("grey", "lightgrey", "orange", "red"),
+                       values=rescale(c(0, 0.4, 0.6, 1)),
+                       name="Development Probability") +
+  labs(title="Development Probability of Parcels") +
+  theme_void()
+
+plot_dvpt_prob
+
+ggsave("plot_dvpt_prob.jpg", plot = plot_dvpt_prob, width = 20, height = 16, units = "in", dpi = 300)
+```
+
+```{r plot_as_point}
+# Assuming your sf object is named 'parcel_data'
+parcel_centroid <- merged_data_sf
+parcel_centroid$geometry <- st_centroid(parcel_centroid$geometry)
+```
+
+```{r}
+# Filter Parcels With Dvpt_Prob Greater Than 0.5
+high_prob_parcels <- parcel_centroid %>%
+  filter(Dvpt_Prob > 0.6)
+```
+
+```{r}
+plot_predict <- ggplot(data = parcel) +
+  geom_sf(aes(geometry = geometry), color = "lightgrey", size = 0.1, fill = NA) +  
+  geom_sf(data = high_prob_parcels, aes(geometry = geometry, color = Dvpt_Prob), size = 2) +  
+  scale_color_gradientn(colors = c("#74c1b9", "#9ad7d2", "#fcd977", "#f9bf3e", "#e2a334")) +  
+  labs(title = "Suitable Places for Development in 2027 (Prob>60%)",
+       color = "Development Probability") +
+  theme_void() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 16)  # Center and bold the title
+  )
+
+print(plot_predict)
+
+ggsave("plot_dvpt_prob_point.jpg", plot = plot_predict, width = 10, height = 8, units = "in", dpi = 300)
+```
+
+### Overlapping with the 2017 and 2022 Permit Data
+
+```{r}
+# Read the 2017 and 2022 permit data
+permit_17 <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/GeoJSON/clipped_permit17.geojson")
+
+permit_22 <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/GeoJSON/clipped_permit22.geojson")
+```
+
+```{r transfer_crs, echo=FALSE, message=FALSE, warning=FALSE}
+# transfer the crs of permit_17 and permit_22 to the same coordinate system as boundary and parcel
+permit_17 <- st_transform(permit_17, st_crs(parcel))
+permit_22 <- st_transform(permit_22, st_crs(parcel))
+```
+
+```{r}
+plot_overlap <- ggplot(data = parcel) +
+  geom_sf(aes(geometry = geometry), color = "lightgrey", size = 0.1, fill = NA) +  
+  geom_sf(data = permit_17, color = "darkblue", size = 1, alpha = 0.4) +
+  geom_sf(data = permit_22, color = "darkred", size = 1, alpha = 0.4) +
+  geom_sf(data = high_prob_parcels, aes(geometry = geometry, color = Dvpt_Prob), size = 2, alpha=0.8) +  
+  scale_color_gradientn(colors = c("#74c1b9", "#9ad7d2", "#fcd977", "#f9bf3e", "#e2a334")) +  
+  labs(title = "Suitable Places for Development in 2027 (Prob>60%)",
+       color = "Development Probability") +
+  theme_void() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 16)  # Center and bold the title
+  )
+
+print(plot_overlap)
+
+ggsave("plot_overlap.jpg", plot = plot_overlap, width = 10, height = 8, units = "in", dpi = 300)
+```
+
+
+
+
+
+
