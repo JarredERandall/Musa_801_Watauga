@@ -1,0 +1,89 @@
+---
+title: "SpatialCV"
+author: "Kathleen Scopis"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(sf)
+library(dplyr)
+parcel <- st_read('https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Data/natural/parcel.geojson')
+
+ZipCodes <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/Data/WataugaZipCodes/WataugaZipCodes.shp")
+
+ZipCodes <- st_transform(ZipCodes, st_crs(parcel))
+
+rf_pred <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/Spatial_CV/rf_pred.csv")
+
+#removed due to ID column use
+#permit_wID <- read.csv("scaled_test_data_wID.csv")
+#permit_wID <- permit_wID[, c("ID", "permit")]
+```
+
+```{r}
+parcels_w_zip <- st_join(parcel, ZipCodes, join = st_within)
+parcels_w_zipSAVE <- parcels_w_zip
+#parcels_w_zip <- parcels_w_zipSAVE
+parcels_w_zip <- data.frame(parcels_w_zip$GlobalID, parcels_w_zip$GEOID20)
+```
+
+
+## IGNORE THESE JOINS IF NOT USING ID COLUMN
+```{r}
+resample_forJoining <- resample[, c("GlobalID", "permit_22")]
+
+#test_data_wID = GlobalID + ID
+#rf_pred = GlobalID + predictions
+# permit_wID = ID + permits 
+
+# to get GlobalID to match with permits and predictions, join permit_wID and test_data_wID by ID (only keep ID, GlobalID, and permits). 
+
+permits_ID_Global <- test_data_wID %>%
+                        left_join(permit_wID, by = "ID")
+
+permits_ID_Global <- permits_ID_Global[, c("GlobalID", "ID", "permit")]
+
+prediction_join <- permits_ID_Global %>%
+                        left_join(rf_pred, by = "GlobalID")
+
+prediction_join <- prediction_join[, c("GlobalID", "ID", "permit", "rf_predictions")]
+
+final_join <- prediction_join %>%
+                        left_join(parcels_w_zip, by = "GlobalID")
+
+final_join <- final_join[, c("GlobalID", "ID", "permit", "rf_predictions", "GEOID20")]
+```
+
+
+Capturing the predicted values of the test set
+```{r}
+final_join$success <- ifelse(final_join$permit == final_join$rf_predictions, 1, 0)
+outcomeSAVE <- final_join
+
+outcome <- outcomeSAVE
+```
+
+Join GlobalID, zip code, and result columns
+
+```{r}
+outcome <- outcome %>%
+              filter(!is.null(GEOID20)) %>%
+              filter(!is.na(success)) %>%
+              distinct()
+```
+
+
+Group by Zip Code
+Summarize by dividing (number of successes per zip code) / (total rows per zip code)
+```{r}
+outcomeZip <- outcome %>%
+  group_by(GEOID20) %>%
+  summarize(successRate = sum(success == 1) / n())
+
+write.csv(outcomeZip, "outcomeZip.csv")
+```

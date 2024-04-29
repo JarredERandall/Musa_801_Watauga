@@ -1,0 +1,535 @@
+---
+title: "Modeling"
+output: html_document
+date: "2024-04-27"
+---
+
+# 3. Modeling
+
+```{r setup, include=FALSE, warning=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE,  message = FALSE, warning = FALSE)
+#install.packages('tidymodels')
+
+# Load all the packages needed
+library(tidyverse)
+library(sf)
+library(RSocrata)
+library(viridis)
+library(spatstat)
+library(raster)
+library(spdep)
+library(FNN)
+library(grid)
+library(gridExtra)
+library(knitr)
+library(kableExtra)
+library(tidycensus)
+library(classInt)   # for KDE and ML risk class intervals
+library(mapview)
+library(ggcorrplot)
+library(ggplot2)
+library(dplyr)
+library(randomForest)
+library(caret)
+library(scales)
+library(tidymodels)
+library(yardstick)
+
+# functions
+root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/"
+source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
+```
+
+For our modeling process, we attempted three different models: the logistic model (to calculate probabilities), Random Forest, and Poisson regression (permit number). We've encountered various issues, including overfitting and misleadingly high accuracy rates, which we attribute to our imbalanced dataset—only 0.05 percent of parcels have permits. To address this, we've tried removing parcels with slopes too steep for development and resampling by oversampling the instances with permits (randomly duplicating the 1’s), yet we still end up with similar challenges. Below, you will find the results of these three models to assist in deciding which model type is best to proceed with.
+
+## 3.1 Loading Data
+Here we load the dataset filtered out the developed and unable to develop (steep slope) parcels as our dataset used for model training. In order to tackle the imbalanced problem of our dataset (1% of '1' and 99% of '0'), we randomly duplicate the '1' in our datset and reach the ratio of 10% of '1' and 90% '0'.
+
+```{r}
+# The dataset filtered out the developed and unable to develop (steep slope) parcels
+filter_no_resample <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Resample/0422_data/data_filtered.csv")
+
+# Join back all the columns needed to the filtered dataset (such as Dist_Waterbody, Dist_Road, etc.)
+joined_filtered_df <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Resample/0422_data/joined_filtered_df.csv")
+
+# The original dataset with all parcels and columns
+df_original <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Resample/0422_data/original_dataset_47265.csv")
+
+# The resampled filtered joined dataset (randomly duplicate 1 to oversample the ratio of 1 to 10% of the total numbers of parcels)
+resample <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Resample/0422_data/resample.csv")
+
+# The parcel geojson
+parcel = st_read('https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Data/natural/parcel.geojson')
+
+# The property value adjusted with inflation
+inflation <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Data/parcel_w_inflation.csv")
+
+# Spatial lag of 2017 and 2022 septic permits knn=3, 4, 5
+permit_nn <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Data/PERMIT_SPATIAL_LAG/parcel_spatial_lag.csv")
+
+# Read the 2017 and 2022 permit data
+permit_17 <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/GeoJSON/clipped_permit17.geojson")
+
+permit_22 <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/GeoJSON/clipped_permit22.geojson")
+```
+
+
+```{r convert_numeric}
+# Convert the dataframe columns to numeric
+resample <- resample %>%
+  mutate_if(~ !identical(., resample$GlobalID), as.numeric)
+
+resample <- na.omit(resample)
+```
+
+
+## 3.2 Random Forest Model
+Firstly, we prepare the training dataset by dropping the 'GlobalID' and 'n_permit_22' columns. And set the 'permit_22' column as our target variable. Then we standarize all the independent variables in the dataset.
+
+```{r}
+# Drop the 'GlobalID' and 'n_permit_22' columns to train the model
+refined_data <- resample%>%dplyr::select(-GlobalID,-n_permit_22)
+```
+
+
+```{r}
+data_scaled <- refined_data
+
+# Standardize all columns except 'permit_22' (target variable)
+data_scaled[, names(data_scaled) != "permit_22"] <- scale(data_scaled[, names(data_scaled) != "permit_22"])
+```
+
+```{r}
+# Identify the index of the 'permit_22' column
+permit_22_index <- which(names(data_scaled) == "permit_22")
+
+# Reorder the columns with 'permit_22' as the first column
+data_scaled <- data_scaled[, c(permit_22_index, setdiff(1:ncol(data_scaled), permit_22_index))]
+```
+
+To determine the variables with the greatest significance, that could be used for model training, we plot out the correlation matrix and a bar chart to show the p-value of the independent variables. Then we choose 13 most significant variables to include in our training.
+
+### Correlation Matrix
+The correlation matrix shows that the 'Slope_Ave', 'Slope_Max', 'permit_17.nn_3', 'permit_17.nn_4', 'permit_17.nn_5', 'Pasture_Hay', 'Developed_Medium_Intensity', 'permit_17', 'YRBUILT' and 'Dist_Flowline' are the most correlated variables.
+
+```{r corr_matrix}
+# Compute the correlation matrix
+cor_matrix <- round(cor(data_scaled), 1)
+
+# Plot the correlation matrix
+plot <- ggcorrplot(
+  cor_matrix, 
+  p.mat = cor_pmat(data_scaled),
+  colors = c("#25CB10", "white", "#FA7800"),
+  type = "lower",
+  insig = "blank"
+) +  
+  labs(title = "Correlation across numeric variables")+
+   theme(
+    axis.text.x = element_text(size = 5),  # Adjust x-axis label size
+    axis.text.y = element_text(size = 5)   # Adjust y-axis label size
+  )
+
+plot
+
+# Export the plot to a file
+ggsave("correlation_matrix.jpg", plot, width = 10, height = 8, dpi = 300)
+```
+
+### P-value Bar Chart
+Similar to the result of the correlation matrix, the p-value bar chart shows that the 'permit_17', 'Slope_Ave', 'Slope_Max', 'permit_17.nn_3', 'permit_17.nn_4', 'permit_17.nn_5', 'Pasture_Hay', 'Developed_Medium_Intensity', 'permit_17', 'YRBUILT', 'Dist_Flowline', 'Dist_Road', 'Developed_High_Intensity', 'Developed_Low_Intensity', 'Developed_Open_Space', 'Soil_A' and 'infaltion_17' are the most correlated variables.
+
+```{r correlation}
+# Plot a bar chart to see the variables' correlation to the target variable
+# Initialize vectors to store results
+correlations <- numeric()
+p_values <- numeric()
+# Exclude both 'permit_22' and 'YRBUILT' from the list of variables
+variables <- names(data_scaled)[!names(data_scaled) %in% c("permit_22", "YRBUILT")]
+
+# Loop through columns and compute correlation test with 'permit_22'
+for (var in variables) {
+  test_result <- cor.test(data_scaled[[var]], data_scaled$permit_22, method = "pearson", use = "complete.obs")
+  correlations <- c(correlations, test_result$estimate)
+  p_values <- c(p_values, test_result$p.value)
+}
+
+# Combine results into a dataframe
+results_df <- data.frame(
+  Variable = variables,
+  Correlation = correlations,
+  P_Value = p_values
+)
+
+# Order dataframe by p-value, largest to smallest for plotting
+results_df <- results_df %>%
+  arrange(desc(P_Value))
+
+# Plot using ggplot2
+plot_corr <- ggplot(results_df, aes(x = reorder(Variable, -P_Value), y = Correlation, fill = -log10(P_Value))) +
+  geom_bar(stat = "identity") +
+  coord_flip() +  # Make the bar plot horizontal
+  scale_fill_continuous(name = "-log10(P-value)", low = "red", high = "blue") +
+  theme_minimal() +
+  xlab("Variable") +
+  ylab("Correlation with permit_22") +
+  ggtitle("Correlation of Variables with permit_22 by Significance")
+
+# Print the plot
+plot_corr
+
+# Export the plot to a file
+ggsave("p-value.jpg", plot_corr, width = 10, height = 8, dpi = 300)
+```
+
+### Choose Features
+So we include the target variabl 'permit_22' and 15 features into the model. The features are 'permit_17', 'Slope_Ave', 'Slope_Max', 'permit_17.nn_3', 'permit_17.nn_4', 'permit_17.nn_5', 'Pasture_Hay', 'Developed_Medium_Intensity', 'permit_17', 'Dist_Flowline', 'Dist_Road', 'Developed_High_Intensity', 'Developed_Low_Intensity', 'Developed_Open_Space', and 'infaltion_17'
+
+```{r choose_features}
+# Include 16 features into the model
+model_data <- resample %>%
+  dplyr::select(permit_22, permit_17, permit_17.nn_3, permit_17.nn_4, permit_17.nn_5, Slope_Ave, Slope_Max, Dist_Flowline, Developed_Medium_Intensity, Pasture_Hay, Dist_Road, Developed_High_Intensity, Developed_Low_Intensity, Developed_Open_Space, inflation17, area) %>%
+  dplyr::rename(
+    permit = permit_22,
+    permit_lag = permit_17,
+    permit_lag.nn_3 = permit_17.nn_3,
+    permit_lag.nn_4 = permit_17.nn_4,
+    permit_lag.nn_5 = permit_17.nn_5,
+    property_value = inflation17
+  )
+```
+
+```{r export_csv_for_spatial_cv}
+write.csv(model_data, "model_data.csv", row.names = FALSE)
+```
+
+```{r standarize_model_data}
+model_data_scaled <- model_data
+
+# Standardize all columns except 'permit' (target variable)
+model_data_scaled[, names(model_data_scaled) != "permit"] <- scale(model_data_scaled[, names(model_data_scaled) != "permit"])
+```
+
+### Data split
+We split our dataset into training and testing sets using the `initial_split()` function from the `rsample` package. We use 80% of the data for training and 20% for testing. The `set.seed()` function is used to ensure reproducibility.
+```{r data_split}
+# Ensure the permit variable is converted to a factor
+model_data_scaled$permit <- as.factor(model_data_scaled$permit)
+
+# Split the data into training and testing sets
+set.seed(123) # for reproducibility
+split <- initial_split(model_data_scaled, prop = 0.8)
+train_data <- training(split)
+test_data <- testing(split)
+
+# Define recipe for data preprocessing
+recipe <- recipe(permit ~ ., data = train_data) %>%
+  step_scale(all_predictors()) %>%
+  step_center(all_predictors())
+```
+
+### Hyperparameter Tuning & Cross Validation
+Next, set up the hyperparameter grid for tuning:
+
+```{r hyperparameter_grid}
+# Define the model specification
+rf_spec <- rand_forest(
+  trees = 1500,
+  mtry = tune(),
+  min_n = tune()
+) %>%
+  set_engine("randomForest") %>%
+  set_mode("classification")
+
+# Define the grid of hyperparameters
+grid <- grid_regular(
+  mtry(range = c(3, 15)),
+  min_n(range = c(1000, 2000)),
+  levels = 3
+)
+```
+
+Hyperparameter tuning and cross-validation are performed using the `tune_grid()` function from the `tune` package. We specify the metrics to optimize for, including ROC AUC, accuracy, sensitivity, precision, and F1 score.
+``` {r tuning}
+# Define a metric set including the new metrics
+custom_metrics <- metric_set(roc_auc, accuracy, sens, ppv, f_meas)
+
+# Perform tuning with these metrics
+tune_results <- tune_grid(
+  rf_spec,
+  recipe,
+  resamples = vfold_cv(train_data, v = 5),
+  grid = grid,
+  metrics = custom_metrics
+)
+```
+
+``` {r tuning_results}
+# View best parameters
+best_params <- select_best(tune_results, metric = "accuracy")
+print(best_params)
+```
+
+Finally, finalize the model with the best parameters and evaluate it on the te`st set.
+
+```{r final_model}
+# Refit the model using the best parameters
+final_rf_spec <- rand_forest(
+  trees = 1500,
+  mtry = best_params$mtry,
+  min_n = best_params$min_n
+) %>%
+  set_engine("randomForest") %>%
+  set_mode("classification")
+
+# Bundle the pre-processing recipe and model into a workflow
+final_workflow <- workflow() %>%
+  add_recipe(recipe) %>%
+  add_model(final_rf_spec)
+
+# Fit the final model on the entire training data
+final_fit <- fit(final_workflow, data = train_data)
+
+# Use the predict function to get the class predictions
+test_predictions <- predict(final_fit, test_data, type = "class")
+
+# Ensure both are factors with the same levels
+test_data$permit <- factor(test_data$permit, levels = c("0", "1"))
+test_predictions$.pred_class <- factor(test_predictions$.pred_class, levels = c("0", "1"))
+
+# Create the confusion matrix
+conf_matrix <- confusionMatrix(data = test_predictions$.pred_class, reference = test_data$permit)
+
+# View the confusion matrix
+print(conf_matrix)
+```
+
+## 3.3 Spatial Cross-Validation
+
+```{r}
+ZipCodes <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Data/WataugaZipCodes/WataugaZipCodes.geojson")
+
+ZipCodes <- st_transform(ZipCodes, st_crs(parcel))
+```
+
+```{r}
+parcels_w_zip <- st_join(parcel, ZipCodes, join = st_within)
+parcels_w_zipSAVE <- parcels_w_zip
+#parcels_w_zip <- parcels_w_zipSAVE
+```
+
+```{r}
+parcels_w_zip <- data.frame(parcels_w_zip$GlobalID, parcels_w_zip$GEOID20)
+```
+
+```{r}
+resample_forJoining <- resample[, c("GlobalID", "permit_22")]
+
+#test_data_wID = GlobalID + ID
+#rf_pred = GlobalID + predictions
+# permit_wID = ID + permits 
+
+# to get GlobalID to match with permits and predictions, join permit_wID and test_data_wID by ID (only keep ID, GlobalID, and permits). 
+
+permits_ID_Global <- test_data_wID %>%
+                        left_join(permit_wID, by = "ID")
+
+permits_ID_Global <- permits_ID_Global[, c("GlobalID", "ID", "permit")]
+
+prediction_join <- permits_ID_Global %>%
+                        left_join(rf_pred, by = "GlobalID")
+
+prediction_join <- prediction_join[, c("GlobalID", "ID", "permit", "rf_predictions")]
+
+final_join <- prediction_join %>%
+                        left_join(parcels_w_zip, by = "GlobalID")
+
+final_join <- final_join[, c("GlobalID", "ID", "permit", "rf_predictions", "GEOID20")]
+```
+
+
+Capturing the predicted values of the test set
+```{r}
+final_join$success <- ifelse(final_join$permit == final_join$rf_predictions, 1, 0)
+outcomeSAVE <- final_join
+
+outcome <- outcomeSAVE
+```
+
+Join GlobalID, zip code, and result columns
+
+```{r}
+outcome <- outcome %>%
+              filter(!is.null(GEOID20)) %>%
+              filter(!is.na(success)) %>%
+              distinct()
+```
+
+Group by Zip Code
+Summarize by dividing (number of successes per zip code) / (total rows per zip code)
+```{r}
+outcomeZip <- outcome %>%
+  group_by(GEOID20) %>%
+  summarize(successRate = sum(success == 1) / n())
+
+write.csv(outcomeZip, "outcomeZip.csv")
+```
+
+
+# 4. Predict for 2027
+
+```{r merge_22_data}
+# Join the inflation 2022 data to the resampled dataset
+df_22 <- joined_filtered_df %>%
+  left_join(dplyr::select(inflation, c("GlobalID", inflation22)), by = "GlobalID")
+
+# Join the 2022 septic permit spatial lag data to the resampled dataset
+df_22 <- df_22 %>%
+  left_join(dplyr::select(permit_nn, GlobalID, permit_22.nn_3, permit_22.nn_4, permit_22.nn_5), by = "GlobalID")
+```
+
+```{r convert_num_df_22_data}
+df_22 <- df_22 %>%
+  mutate_if(~ !identical(., df_22$GlobalID), as.numeric)
+
+df_22 <- na.omit(df_22)
+```
+
+
+```{r predict_data}
+predict_data <- df_22 %>%
+  dplyr::select(GlobalID, permit_22, permit_22.nn_3, permit_22.nn_4, permit_22.nn_5, Slope_Ave, Slope_Max, Dist_Flowline, Developed_Medium_Intensity, Pasture_Hay, Dist_Road, Developed_High_Intensity, Developed_Low_Intensity, Developed_Open_Space, inflation22, area) %>%
+  dplyr::rename(
+    permit_lag = permit_22,
+    permit_lag.nn_3 = permit_22.nn_3,
+    permit_lag.nn_4 = permit_22.nn_4,
+    permit_lag.nn_5 = permit_22.nn_5,
+    property_value = inflation22
+  )
+
+write.csv(predict_data, "predict_data.csv")
+```
+
+```{r}
+df_no_id <- dplyr::select(predict_data, -GlobalID)
+
+# Standardize all columns in the predict data
+scaled_pred_df <- scale(df_no_id)
+```
+
+```{r predict}
+rf_predictions <- predict(final_fit, new_data = scaled_pred_df, type = "prob")
+predictions_result <- as.data.frame(rf_predictions)
+```
+
+```{r predict_data}
+result_data <- predict_data
+result_data$"Dvpt_Prob" <- predictions_result$`1`
+```
+
+```{r}
+parcelid <- parcel%>%dplyr::select("GlobalID", "PARCELID","geometry")
+```
+
+
+```{r}
+# Convert the 'area' column unit to acre
+result_data$area_acre <- result_data$area / 43560
+```
+
+
+```{r}
+merged <- merge(result_data, parcelid, by = "GlobalID", all.x = TRUE)
+```
+
+```{r}
+st_write(merged, "prediction_0422.geojson", driver = "GeoJSON")
+```
+
+``` {r}
+# Convert 'merged_data' to an sf object
+merged_data_sf <- st_read("E:/UPenn/24Spring/MUSA_Practicum/Modeling/0422/prediction_0422.geojson")
+```
+
+
+```{r plot_prediction}
+#install.packages("scales")
+library(scales)
+
+plot_dvpt_prob <- ggplot() +
+  geom_sf(data = merged_data_sf, aes(fill=Dvpt_Prob), colour=NA) +
+  scale_fill_gradientn(colors=c("grey", "lightgrey", "orange", "red"),
+                       values=rescale(c(0, 0.4, 0.6, 1)),
+                       name="Development Probability") +
+  labs(title="Development Probability of Parcels") +
+  theme_void()
+
+plot_dvpt_prob
+
+ggsave("plot_dvpt_prob.jpg", plot = plot_dvpt_prob, width = 20, height = 16, units = "in", dpi = 300)
+```
+
+```{r plot_as_point}
+# Assuming your sf object is named 'parcel_data'
+parcel_centroid <- merged_data_sf
+parcel_centroid$geometry <- st_centroid(parcel_centroid$geometry)
+```
+
+```{r}
+# Filter Parcels With Dvpt_Prob Greater Than 0.5
+high_prob_parcels <- parcel_centroid %>%
+  filter(Dvpt_Prob > 0.6)
+```
+
+```{r}
+plot_predict <- ggplot(data = parcel) +
+  geom_sf(aes(geometry = geometry), color = "lightgrey", size = 0.1, fill = NA) +  
+  geom_sf(data = high_prob_parcels, aes(geometry = geometry, color = Dvpt_Prob), size = 2) +  
+  scale_color_gradientn(colors = c("#74c1b9", "#9ad7d2", "#fcd977", "#f9bf3e", "#e2a334")) +  
+  labs(title = "Suitable Places for Development in 2027 (Prob>60%)",
+       color = "Development Probability") +
+  theme_void() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 16)  # Center and bold the title
+  )
+
+print(plot_predict)
+
+ggsave("plot_dvpt_prob_point.jpg", plot = plot_predict, width = 10, height = 8, units = "in", dpi = 300)
+```
+
+### Overlapping with the 2017 and 2022 Permit Data
+
+
+```{r transfer_crs, echo=FALSE, message=FALSE, warning=FALSE}
+# transfer the crs of permit_17 and permit_22 to the same coordinate system as boundary and parcel
+permit_17 <- st_transform(permit_17, st_crs(parcel))
+permit_22 <- st_transform(permit_22, st_crs(parcel))
+```
+
+```{r}
+plot_overlap <- ggplot(data = parcel) +
+  geom_sf(aes(geometry = geometry), color = "lightgrey", size = 0.1, fill = NA) +  
+  geom_sf(data = permit_17, color = "darkblue", size = 1, alpha = 0.4) +
+  geom_sf(data = permit_22, color = "darkred", size = 1, alpha = 0.4) +
+  geom_sf(data = high_prob_parcels, aes(geometry = geometry, color = Dvpt_Prob), size = 2, alpha=0.8) +  
+  scale_color_gradientn(colors = c("#74c1b9", "#9ad7d2", "#fcd977", "#f9bf3e", "#e2a334")) +  
+  labs(title = "Suitable Places for Development in 2027 (Prob>60%)",
+       color = "Development Probability") +
+  theme_void() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 16)  # Center and bold the title
+  )
+
+print(plot_overlap)
+
+ggsave("plot_overlap.jpg", plot = plot_overlap, width = 10, height = 8, units = "in", dpi = 300)
+```
+
+
+
+
+
+
+
+
