@@ -1,0 +1,1741 @@
+---
+title: "Watauga - Prioritization Assessment Tool for Workforce Housing Land Parcel Development (Final Markdown)"
+author: "Jingyi Cai, Alice Han, Yinan Li, Jarred Randall, Kathleen Scopis"
+date: "2024-05-07"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_download: true
+knitr:
+  echo: false
+  message: false
+  warning: false
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, results='hide', cache = TRUE)
+```
+
+```{r Library, echo=FALSE, message=FALSE, warning=FALSE}
+# install.packages("spatstat", repos="http://cran.r-project.org")
+# install.packages("spatstat.explore", repos="http://cran.r-project.org")
+# install.packages("FedData", repos="http://cran.r-project.org")
+# install.packages("animation", repos="http://cran.r-project.org")
+# install.packages("rasterVis", repos="http://cran.r-project.org")
+# install.packages("raster", repos="http://cran.r-project.org")
+# install.packages("tidyverse", repos="http://cran.r-project.org")
+# install.packages("rgdal", repos = "http://cran.r-project.org", type = "source")
+# install.packages("tidycensus")
+# install.packages("stringi")
+# install.packages("sp", repos="http://cran.r-project.org")
+# install.packages("kableExtra", repos="http://cran.r-project.org")
+# install.packages("systemfonts", repos="http://cran.r-project.org")
+# install.packages("highr", repos="http://cran.r-project.org")
+# install.packages("jquerylib", repos="http://cran.r-project.org")
+# install.packages("sass", repos="http://cran.r-project.org")
+# install.packages("cachem", repos="http://cran.r-project.org")
+# install.packages("RSocrata", repos="http://cran.r-project.org")
+# install.packages("gridExtra", repos="http://cran.r-project.org")
+# install.packages("spdep", repos="http://cran.r-project.org")
+# install.packages("FNN", repos="http://cran.r-project.org")
+# install.packages("grid", repos="http://cran.r-project.org")
+# install.packages("kableExtra", repos="http://cran.r-project.org")
+# install.packages("classInt", repos="http://cran.r-project.org")
+# install.packages("mapview", repos="http://cran.r-project.org")
+# install.packages("crosstalk", repos="http://cran.r-project.org")
+# install.packages("ggplot2", repos="http://cran.r-project.org")
+# install.packages("reshape2", repos="http://cran.r-project.org")
+# install.packages("rgdal")
+
+library(RSocrata)
+library(viridis) 
+library(spatstat)
+library(spdep)
+library(FNN)
+library(grid)
+library(gridExtra)
+library(kableExtra)
+library(classInt)   # for KDE and ML risk class intervals
+library(mapview)
+library(FedData)
+library(tidyverse)
+library(tidycensus)
+library(sf)
+library(sp)
+library(dplyr)
+library(raster) 
+library(animation)
+library(rasterVis)
+library(RColorBrewer) 
+library(ggplot2)      
+library(colorspace)
+library(dplyr)
+library(tidyr)
+library(readr)
+library(sf)
+library(terra)
+library(kableExtra)
+library(reshape2)
+library(yardstick)
+library(randomForest)
+library(caret)
+library(scales)
+library(tidymodels)
+library(knitr)
+library(classInt)   # for KDE and ML risk class intervals
+library(ggcorrplot)
+
+# dummy <- read.csv("/Users/alice/Downloads/landcover_legend.csv")
+# functions
+root.dir = "https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/DATA/"
+
+source("https://raw.githubusercontent.com/urbanSpatial/Public-Policy-Analytics-Landing/master/functions.r")
+color_palette <- c("#e2a334", "#f9bf3e", "#fcd977", "#9ad7d2", "#74c1b9")
+```
+
+# 1. Introduction
+
+## 1.1 Problem Statement / Use Case
+
+Watauga County, North Carolina, is currently experiencing a housing shortage that is expected to intensify in the near future. The shortage is exacerbated by vacation rentals and student housing, which has significantly reduced the available residential housing options. The Watauga Housing Solutions Committee is partnering with other community and local government organizations looking to develop affordable and workforce housing in order to mitigate the severe decreases in housing affordability. They are working with a developer to prioritize the most feasible sites to pursue for purchase and development. Because of the extreme physical conditions of the landscape (slope, soils, etc.), there is currently no streamlined system in place to help identify suitable parcels for development. In response to this issue, we have been contracted to develop an application-based data framework that is designed to identify land parcels based on their likelihood to be developed for affordable workforce housing. This data framework will be designed to function as an interactive application interface that will allow users to input criteria related to land supply and combine it with likelihood estimates to rank each parcel in the county in terms of development suitability.
+
+## 1.2 Project Client
+
+The main project client is the Watauga Housing Council and its Housing Solutions Committee. This organization is tasked with responding to the economic, environmental, and social aspects of the county to provide adequate housing options for all residents. Our main points of contacts within the housing council are Dr. Kellie Reed Ashcraft (Facilitator/Organizer, Watauga Housing Council), Dr. Chris Quattro (Assistant Professor, Appalachian State University/Member, Watauga Housing Council), Laura Beach (Member, Watauga Housing Council).
+
+## 1.3 Dependent Variable
+
+The key indicator for development that will be used is the administrative record associated with septic system permits. This permit is exclusively granted when a property satisfies the requirements for both land supply and developer demand at that specific site. Due to the rural nature of the project area, there is relatively low wastewater sewer coverage. Subsequently, a septic system is critical for new development, and a site cannot be developed without one. Our approach will involve identifying the site suitability characteristics (e.g., slope, soil type) most closely related to the probability of a parcel receiving a septic permit. Using this information, we will forecast the likelihood that a given parcel will receive a new septic permit, which is the dependent variable.
+
+# 2. Exploratory Data Analysis
+
+## 2.1 Demographic
+
+### (1) Population Size
+
+In 2017, Watauga County was home to 53,421 people. Increasing to 54,540 by 2022, the county is showing steady increases in population over the last 5 years. As more people call the county home, it is increasingly important for the Housing Council to address future housing needs.
+
+```{r population_size, echo=FALSE, message=FALSE, warning=FALSE, results='hide', fig.keep='all'}
+county17pop <- 
+  get_acs(geography = "county", 
+          variables = c("S0101_C01_001"), 
+          year=2017, state="NC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('EPSG:4326') %>%
+  rename(Population = S0101_C01_001E) %>%
+  dplyr::select(-starts_with("B")) %>%
+  mutate(
+         NAME = str_replace(NAME, ", North Carolina", "")) %>%
+  dplyr::filter(NAME %in% c("Avery County", "Wilkes County", "Ashe County", "Watauga County", "Caldwell County")) %>%
+  dplyr::select(GEOID, NAME, Population)
+
+county22pop <- 
+  get_acs(geography = "county", 
+          variables = c("S0101_C01_001"), 
+          year=2022, state="NC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('EPSG:4326') %>%
+  rename(Population = S0101_C01_001E) %>%
+  dplyr::select(-starts_with("B")) %>%
+  mutate(
+         NAME = str_replace(NAME, ", North Carolina", "")) %>%
+  dplyr::filter(NAME %in% c("Avery County", "Wilkes County", "Ashe County", "Watauga County", "Caldwell County")) %>%
+  dplyr::select(GEOID, NAME, Population)
+
+county17pop <- county17pop %>% mutate(year = 2017)
+county22pop <- county22pop %>% mutate(year = 2022)
+
+combined_yearspop <- bind_rows(county17pop, county22pop)
+
+
+# plot
+ggplot(combined_yearspop, aes(x = NAME, y = Population, fill = factor(year))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("#f9bf3e", "#74c1b9")) +
+  labs(title = "Population",
+       subtitle = "by county",
+       x = " ",
+       y = "Number of People",
+       fill = "Year") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+### (2) Median Age
+
+Watauga's median age has increased sharply over the last five years. In 2017, the median age was 30.6, rising 1.5 years to 32.1 in 2022. However, Watauga remains significantly younger than the surrounding area, which tends towards the mid/upper 40s, likely due to the strong student population.
+
+```{r median_age, echo=FALSE, message=FALSE, warning=FALSE, fig.show='hold'}
+county17age <- 
+  get_acs(geography = "county", 
+          variables = c("S0101_C01_032"), 
+          year=2017, state="NC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('EPSG:4326') %>%
+  rename(Age = S0101_C01_032E) %>%
+  dplyr::select(-starts_with("B")) %>%
+  mutate(
+         NAME = str_replace(NAME, ", North Carolina", "")) %>%
+  dplyr::filter(NAME %in% c("Avery County", "Wilkes County", "Ashe County", "Watauga County", "Caldwell County")) %>%
+  dplyr::select(GEOID, NAME, Age)
+
+county22age <- 
+  get_acs(geography = "county", 
+          variables = c("S0101_C01_032"), 
+          year=2022, state="NC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('EPSG:4326') %>%
+  rename(Age = S0101_C01_032E) %>%
+  dplyr::select(-starts_with("B")) %>%
+  mutate(
+         NAME = str_replace(NAME, ", North Carolina", "")) %>%
+  dplyr::filter(NAME %in% c("Avery County", "Wilkes County", "Ashe County", "Watauga County", "Caldwell County")) %>%
+  dplyr::select(GEOID, NAME, Age)
+
+
+county17age <- county17age %>% mutate(year = 2017)
+county22age <- county22age %>% mutate(year = 2022)
+
+combined_yearsage <- bind_rows(county17age, county22age)
+
+# plot
+ggplot(combined_yearsage, aes(x = NAME, y = Age, fill = factor(year))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("#f9bf3e", "#74c1b9")) +
+  labs(title = "Median Age",
+       subtitle = "by county",
+       x = " ",
+       y = "Age (in years)",
+       fill = "Year") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.y = element_text(color = "grey50"))
+```
+
+### (3) Average Household Size
+
+In 2017, the median household size in Watauga County was 2.35. Decreasing slightly in 2022 at 2.30, household size largely mirrors those of surrounding counties, which all experience households of approximately 2-3 people. This suggests that many homes in the area are families, rather than just individuals or couples living together.
+
+```{r household_size, echo=FALSE, message=FALSE, warning=FALSE, fig.show='hold'}
+countyHH17 <- 
+  get_acs(geography = "county", 
+          variables = c("S1101_C01_002"), 
+          year=2017, state="NC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('EPSG:4326') %>%
+  rename("Household_Size" = S1101_C01_002E) %>%
+  dplyr::select(-starts_with("B")) %>%
+  mutate(
+         NAME = str_replace(NAME, ", North Carolina", "")) %>%
+  dplyr::filter(NAME %in% c("Avery County", "Wilkes County", "Ashe County", "Watauga County", "Caldwell County")) %>%
+  dplyr::select(GEOID, NAME, "Household_Size")
+
+countyHH22 <- 
+  get_acs(geography = "county", 
+          variables = c("S1101_C01_002"), 
+          year=2022, state="NC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('EPSG:4326') %>%
+  rename("Household_Size" = S1101_C01_002E) %>%
+  dplyr::select(-starts_with("B")) %>%
+  mutate(
+         NAME = str_replace(NAME, ", North Carolina", "")) %>%
+  dplyr::filter(NAME %in% c("Avery County", "Wilkes County", "Ashe County", "Watauga County", "Caldwell County")) %>%
+  dplyr::select(GEOID, NAME, "Household_Size")
+
+
+countyHH17 <- countyHH17 %>% mutate(year = 2017)
+countyHH22 <- countyHH22 %>% mutate(year = 2022)
+
+combined_yearsHH <- bind_rows(countyHH17, countyHH22)
+
+# plot
+ggplot(combined_yearsHH, aes(x = NAME, y = Household_Size, fill = factor(year))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("#f9bf3e", "#74c1b9")) +
+  labs(title = "Average Household Size",
+       subtitle = "by county",
+       x = " ",
+       y = "# of people",
+       fill = "Year") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.y = element_text(color = "grey50"))
+
+```
+
+### (4) Median Income
+
+In 2022, Watauga County saw a median household income of \$50,034. This is on par with the surrounding counties of Ashe, Avery, Caldwell, and Wilkes, which fell within \$3,000 of this range. (\$49,176-\$53,313). The county experiences relatively low incomes, compared to the national median of \$74,580.
+
+```{r median_income, echo=FALSE, message=FALSE, warning=FALSE, fig.show='hold'}
+county17inc <- 
+  get_acs(geography = "county", 
+          variables = c("S1901_C01_012"), 
+          year=2017, state="NC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('EPSG:4326') %>%
+  rename(Income = S1901_C01_012E) %>%
+  dplyr::select(-starts_with("B")) %>%
+  mutate(
+         NAME = str_replace(NAME, ", North Carolina", "")) %>%
+  dplyr::filter(NAME %in% c("Avery County", "Wilkes County", "Ashe County", "Watauga County", "Caldwell County")) %>%
+  dplyr::select(GEOID, NAME, Income)
+
+county22inc <- 
+  get_acs(geography = "county", 
+          variables = c("S1901_C01_012"), 
+          year=2022, state="NC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('EPSG:4326') %>%
+  rename(Income = S1901_C01_012E) %>%
+  dplyr::select(-starts_with("B")) %>%
+  mutate(
+         NAME = str_replace(NAME, ", North Carolina", "")) %>%
+  dplyr::filter(NAME %in% c("Avery County", "Wilkes County", "Ashe County", "Watauga County", "Caldwell County")) %>%
+  dplyr::select(GEOID, NAME, Income)
+
+county17inc <- county17inc %>% mutate(year = 2017)
+county22inc <- county22inc %>% mutate(year = 2022)
+
+combined_yearsinc <- bind_rows(county17inc, county22inc)
+
+# plot
+ggplot(combined_yearsinc, aes(x = NAME, y = Income, fill = factor(year))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("#f9bf3e", "#74c1b9")) +
+  labs(title = "Median Income",
+       subtitle = "by county",
+       x = " ",
+       y = "Income (in $)",
+       fill = "Year") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.y = element_text(color = "grey50"))
+```
+
+## 2.2 Housing
+
+### (1) Housing by Occupancy Type (Own vs. Rent)
+
+As of 2022, approximately two-thirds of homes in the County are owner-occupied (61%). When considered alongside the large youth and student population associated with Appalachian State, it becomes clearer that most adults without association to the university are homeowners.
+
+```{r housing_occupancy, echo=FALSE, message=FALSE, warning=FALSE, fig.show='hold'}
+county17ocup <- 
+  get_acs(geography = "county", 
+          variables = c("S2501_C01_001",
+                        "S2501_C03_001",
+                        "S2501_C05_001"
+                        ), 
+          year=2017, state="NC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('EPSG:4326') %>%
+  rename(Total = S2501_C01_001E,
+        Owner = S2501_C03_001E,
+        Renter = S2501_C05_001E) %>%
+  dplyr::select(-starts_with("B")) %>%
+  mutate(
+         NAME = str_replace(NAME, ", North Carolina", "")) %>%
+  dplyr::filter(NAME %in% c("Avery County", "Wilkes County", "Ashe County", "Watauga County", "Caldwell County")) %>%
+  dplyr::select(GEOID, NAME, Total, Owner, Renter)
+
+county22ocup <- 
+  get_acs(geography = "county", 
+          variables = c("S2501_C01_001",
+                        "S2501_C03_001",
+                        "S2501_C05_001"
+                        ), 
+          year=2022, state="NC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('EPSG:4326') %>%
+  rename(Total = S2501_C01_001E,
+        Owner = S2501_C03_001E,
+        Renter = S2501_C05_001E) %>%
+  dplyr::select(-starts_with("B")) %>%
+  mutate(
+         NAME = str_replace(NAME, ", North Carolina", "")) %>%
+  dplyr::filter(NAME %in% c("Avery County", "Wilkes County", "Ashe County", "Watauga County", "Caldwell County")) %>%
+  dplyr::select(GEOID, NAME, Total, Owner, Renter)
+
+county17ocup <- county17ocup %>% mutate(year = 2017)
+county22ocup <- county22ocup %>% mutate(year = 2022)
+
+combined_yearsocup <- bind_rows(county17ocup, county22ocup)
+
+
+# plot
+# long format
+combined_yearsocup_long <- pivot_longer(combined_yearsocup, cols = c(Renter, Owner), names_to = "Occupancy", values_to = "Units")
+
+ggplot(combined_yearsocup_long, aes(x = NAME, y = Units, fill = Occupancy)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("#f9bf3e", "#74c1b9")) +
+  labs(title = "Housing Units",
+       subtitle = "by occupancy type",
+       x = " ",
+       y = "# of Housing Units",
+       fill = "Occupancy") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.y = element_text(color = "grey50"))
+```
+
+### (2) Rent Burden
+
+A household is considered rent burdened if they spend more than 30% of their monthly income on housing. This metric is key in determining the financial health of the residents, as well as current conditions of the housing market. Northwest North Carolina has been trending lower in rent burden, with many counties seeing a decrease in burden over the last five years. However, the story is different when it comes to Watauga, which has seen an uptick in rent burden since 2017.
+
+Currently, more than two-thirds of residents are rent burdened, signaling an unstable housing market. This is a key indicator for our project's use case, as the County continues to search for solutions for making housing more affordable and accessible for its residents and families.
+
+```{r rent_burden, echo=FALSE, message=FALSE, warning=FALSE, fig.show='hold'}
+county17rent <- 
+  get_acs(geography = "county", 
+          variables = c("B25070_007E",
+                        "B25070_008E",
+                        "B25070_009E",
+                        "B25070_010E",
+                        "B25070_011E",
+                        "B25003_003E"), 
+          year=2017, state="NC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('EPSG:4326') %>%
+  rename(RentBurden_30_35 = B25070_007E,
+         RentBurden_35_39 = B25070_008E,
+         RentBurden_40_49 = B25070_009E,
+         RentBurden_50_99 = B25070_010E,
+         RentBurden_60_more = B25070_011E,
+         total_renter_occupied = B25003_003E) %>%
+  dplyr::select(-starts_with("B")) %>%
+  mutate(rent_burdened_households = RentBurden_30_35 + RentBurden_35_39 + RentBurden_40_49 + RentBurden_50_99 + RentBurden_60_more,
+         Percent_Burdened = round((rent_burdened_households / total_renter_occupied) * 100, 0),
+         NAME = str_replace(NAME, ", North Carolina", "")) %>%
+  dplyr::filter(NAME %in% c("Avery County", "Wilkes County", "Ashe County", "Watauga County","Caldwell County")) %>%
+  dplyr::select(GEOID, NAME, rent_burdened_households, total_renter_occupied, Percent_Burdened)
+
+county22rent <- 
+  get_acs(geography = "county", 
+          variables = c("B25070_007E",
+                        "B25070_008E",
+                        "B25070_009E",
+                        "B25070_010E",
+                        "B25070_011E",
+                        "B25003_003E"), 
+          year=2022, state="NC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('EPSG:4326') %>%
+  rename(RentBurden_30_35 = B25070_007E,
+         RentBurden_35_39 = B25070_008E,
+         RentBurden_40_49 = B25070_009E,
+         RentBurden_50_99 = B25070_010E,
+         RentBurden_60_more = B25070_011E,
+         total_renter_occupied = B25003_003E) %>%
+  dplyr::select(-starts_with("B")) %>%
+  mutate(rent_burdened_households = RentBurden_30_35 + RentBurden_35_39 + RentBurden_40_49 + RentBurden_50_99 + RentBurden_60_more,
+         Percent_Burdened = round((rent_burdened_households / total_renter_occupied) * 100, 0),
+         NAME = str_replace(NAME, ", North Carolina", "")) %>%
+  dplyr::filter(NAME %in% c("Avery County", "Wilkes County", "Ashe County", "Watauga County", "Caldwell County")) %>%
+  dplyr::select(GEOID, NAME, rent_burdened_households, total_renter_occupied, Percent_Burdened)
+
+county17rent <- county17rent %>% mutate(year = 2017)
+county22rent <- county22rent %>% mutate(year = 2022)
+
+combined_yearsrent <- bind_rows(county17rent, county22rent)
+
+
+# Reshape the data into longer format
+combined_yearsrent_long <- pivot_longer(combined_yearsrent, 
+                                        cols = c(Percent_Burdened), 
+                                        names_to = "Year", 
+                                        values_to = "Percentage")
+
+# Plotting the data
+ggplot(combined_yearsrent_long, aes(x = reorder(NAME, -Percentage), y = Percentage, fill = Year)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("#f9bf3e"), guide = FALSE) +  # Hide legend
+  labs(title = "Percentage of Rent-Burdened Households",
+       subtitle = "by county",
+       x = " ",
+       y = "Percentage (%)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+        axis.title.x = element_blank(),
+        axis.text.y = element_text(color = "grey50"))  # Hiding x-axis label
+```
+
+```{r rent_burden_map17, echo=FALSE, message=FALSE, warning=FALSE, fig.show='hold'}
+ggplot(data = county17rent) +
+  geom_sf(aes(fill = Percent_Burdened)) + # Removed color = color_palette here
+  scale_fill_gradientn(colors = color_palette) + # Use this to apply your color palette
+  geom_sf_text(aes(label = NAME), 
+               size = 4, # Adjusted size
+               colour = "black", 
+               check_overlap = TRUE,
+               fontface = "bold") + # Make text bold
+  geom_sf_text(aes(label = paste0(Percent_Burdened, "%")), 
+               size = 3.5, # Adjusted size
+               colour = "black", 
+               check_overlap = TRUE, 
+               nudge_y = -0.05,
+               fontface = "bold") + # Make text bold
+  labs(title = "Rent Burdened Households by County",
+       subtitle = "Year: 2017",
+       fill = "Percent Burdened") +
+  theme_void() +
+  theme(legend.position = "right")
+```
+
+```{r rent_burden_map22, echo=FALSE, message=FALSE, warning=FALSE, fig.show='hold'}
+ggplot(data = county22rent) +
+  geom_sf(aes(fill = Percent_Burdened)) + # Removed color = color_palette here
+  scale_fill_gradientn(colors = color_palette) + # Use this to apply your color palette
+  geom_sf_text(aes(label = NAME), 
+               size = 4, # Adjusted size
+               colour = "black", 
+               check_overlap = TRUE,
+               fontface = "bold") + # Make text bold
+  geom_sf_text(aes(label = paste0(Percent_Burdened, "%")), 
+               size = 3.5, # Adjusted size
+               colour = "black", 
+               check_overlap = TRUE, 
+               nudge_y = -0.05,
+               fontface = "bold") + # Make text bold
+  labs(title = "Rent Burdened Households by County",
+       subtitle = "Year: 2022",
+       fill = "Percent Burdened") +
+  theme_void() +
+  theme(legend.position = "right")
+```
+
+### (3) House Price / Ownership Burden
+
+The median house value is \$283,000, which is roughly the same value as the nationwide average property value. The ownership affordability improved in the past five years, as 14.4% of the ownership houses are not affordable, which decreased from 15.6% in 2017. The ownership affordability is also better than the national average, which is 16.8%.
+
+### (4) Student Population
+
+Within Watauga County sits Appalachian State University, a public four-year university that serves over 18,000 students. The surge of student populations is felt throughout Boone and surrounding areas, and plays a large role in the County's economy. As of 2022, around 30% of Watauga's population was college students, a slight increase in the last five years. When planning for existing and future housing needs, the Housing Council should consider the student population, as well as housing that can continue to provide as graduates settle elsewhere in the County and find jobs.
+
+### (5) Number of Households by Vehicles Owned
+
+Watauga is largely a car-dominated community, with nearly every household owning at least one car. In fact, according to the Census, about 14,000 households have 2 or more, suggesting that almost every adult in the county has access to their own car, and may not need to share with a spouse or other housemate. Mobility habits can be ascertained, such as the need to travel far distances for daily trips such as the commute to work or to get groceries.
+
+```{r vehicles_owned, echo=FALSE, message=FALSE, warning=FALSE, fig.show='hold'}
+county17 <- 
+  get_acs(geography = "county", 
+          variables = c("B08201_002",
+                        "B08201_003",
+                        "B08201_004",
+                        "B08201_005",
+                        "B08201_006"), 
+          year=2017, state="NC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('EPSG:4326') %>%
+  rename("No Vehicle" = B08201_002E,
+         "1 Vehicle" = B08201_003E,
+         "2 Vehicles" = B08201_004E,
+         "3 Vehicles" = B08201_005E,
+         "4+ Vehicles" = B08201_006E) %>%
+  dplyr::select(-starts_with("B")) %>%
+  mutate(
+         NAME = str_replace(NAME, ", North Carolina", "")) %>%
+  dplyr::filter(NAME %in% c("Avery County", "Wilkes County", "Ashe County", "Watauga County", "Caldwell County")) %>%
+  dplyr::select(GEOID, NAME, "No Vehicle", "1 Vehicle", "2 Vehicles", "3 Vehicles", "4+ Vehicles")
+
+county22 <- 
+  get_acs(geography = "county", 
+          variables = c("B08201_002",
+                        "B08201_003",
+                        "B08201_004",
+                        "B08201_005",
+                        "B08201_006"), 
+          year=2022, state="NC", 
+          geometry=TRUE, output="wide") %>%
+  st_transform('EPSG:4326') %>%
+  rename("No Vehicle" = B08201_002E,
+         "1 Vehicle" = B08201_003E,
+         "2 Vehicles" = B08201_004E,
+         "3 Vehicles" = B08201_005E,
+         "4+ Vehicles" = B08201_006E) %>%
+  dplyr::select(-starts_with("B")) %>%
+  mutate(
+         NAME = str_replace(NAME, ", North Carolina", "")) %>%
+  dplyr::filter(NAME %in% c("Avery County", "Wilkes County", "Ashe County", "Watauga County", "Caldwell County")) %>%
+  dplyr::select(GEOID, NAME, "No Vehicle", "1 Vehicle", "2 Vehicles", "3 Vehicles", "4+ Vehicles")
+
+county17 <- county17 %>% mutate(year = 2017)
+county22 <- county22 %>% mutate(year = 2022)
+
+combined_years <- bind_rows(county17, county22)
+
+# Subset data for Watauga County
+watauga_data <- combined_years %>%
+  filter(NAME == "Watauga County")
+
+# Melt the dataset to long format
+watauga_data_long <- melt(watauga_data, id.vars = c("year", "NAME", "GEOID"), 
+                          measure.vars = c("No Vehicle", "1 Vehicle", "2 Vehicles", "3 Vehicles", "4+ Vehicles"),
+                          variable.name = "Vehicle_Category", value.name = "Households")
+
+# Plot histogram
+ggplot(watauga_data_long, aes(x = Vehicle_Category, y = Households, fill = factor(year))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Number of Households by Vehicles Owned",
+       subtitle = "Years: 2017 and 2022" ,
+       x = " ",
+       y = "Number of Households",
+       fill = "Year") +
+  scale_fill_manual(values = c("#f9bf3e", "#74c1b9"), labels = c("2017", "2022")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+## 2.3 Dependent Variable - Septic Permit
+
+We used the number of new septic permits within each parcel as our model's dependent variable. Watauga County approved 300 new septic permits in 2017. The number increased to 472 in 2022. The data indicates a 57.33% increase in the number of septic permits over the five-year period. The number of septic permits is a critical indicator of development and land use change. The increase in septic permits suggests a significant increase in new development and land use change in Watauga County over the past five years.
+
+```{r read_permit_data, echo=FALSE, message=FALSE, warning=FALSE}
+boundary <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/GeoJSON/Boundary.geojson")
+parcel <- st_read("https://drive.google.com/uc?export=download&id=1z4HD0F2GHLBk6KKYbn8ABYXeZxEFK2AJ")
+permit_17 <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/GeoJSON/clipped_permit17.geojson")
+permit_22 <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/GeoJSON/clipped_permit22.geojson")
+```
+
+```{r transfer_crs, echo=FALSE, message=FALSE, warning=FALSE}
+# transfer the crs of permit_17 and permit_22 to the same coordinate system as boundary and parcel
+permit_17 <- st_transform(permit_17, st_crs(parcel))
+permit_22 <- st_transform(permit_22, st_crs(parcel))
+```
+
+```{r plot_permits, echo=FALSE, message=FALSE, warning=FALSE, fig.show='hold'}
+
+#c("#e2a334", "#f9bf3e", "#fcd977", "#9ad7d2", "#74c1b9")
+
+plot_permit <- ggplot() +
+  geom_sf(data = parcel, color = "grey90", fill = "transparent", size = 0.2) +
+  geom_sf(data = boundary, color = "#cf890e", fill = "transparent", show.legend = FALSE) +
+  geom_sf(data = permit_17, aes(color = "Permit 17"), size = 1, alpha = 0.7, show.legend = "point") +
+  geom_sf(data = permit_22, aes(color = "Permit 22"), size = 1, alpha = 0.7, show.legend = "point") +
+  scale_color_manual(name = "Permits", 
+                     values = c("Permit 17" = "#e2a334", "Permit 22" = "#74c1b9"),
+                     labels = c("2017", "2022")) +
+  theme_void() +
+  theme(legend.position = "right") +
+  labs(title = "Watauga Septic Permits",
+       subtitle = "Years: 2017 and 2022") +
+  theme(plot.title = element_text(face = "bold", size = 17), 
+        legend.title = element_text(face = "bold"), 
+        legend.text = element_text(size = 10)) 
+
+plot_permit
+
+# Save the plot as a high-resolution image
+#ggsave("plot_permit_22.png", plot_22, width = 10, height = 8, dpi = 300)
+```
+
+## 2.4 Physical Features
+
+### (1) Land Cover
+
+#### (a) Land Cover - 2021 (latest data) {.tabset}
+
+The Watauga County 2021 land cover underscores the county's rich natural resources and moderate urban development. The total land cover area is predominantly forested land (74.56%), with 54.16% of the county's land cover area being deciduous forest and 19.2% mixed forest, and 1.2% evergreen forest. Developed areas, which is limited to about 13.89% of the total land cover area is made up of 11.23% of developed open space, 1.48% developed low intensity, 0.9% developed medium density, 0.28% developed high intensity. The majority of development is classified as open space, which could encompass parks, golf courses, or agricultural land that adds to the rural character of the county. The incrementally smaller percentages for low, medium, and high-intensity developments indicate concentrated urbanization around cities and transportation corridors, reflecting strategic land use planning that preserves the natural landscape while accommodating residential and commercial needs.
+
+```{r read_lulc_data, echo=FALSE, message=FALSE, warning=FALSE}
+
+setwd
+fire_districts <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/GeoJSON/FireDistricts_FeaturesToJSON.geojson")
+managed_areas <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/GeoJSON/managed_areasToJSON.geojson")
+natural_areas <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/GeoJSON/Natural_area_JSON.geojson")
+zoned_areas <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/GeoJSON/zonedareas_FeaturesToJSON.geojson")
+municipal_bound <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/GeoJSON/NCDOT_Municipal_Boundaries.geojson")
+county_bound <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/GeoJSON/NCDOT_County_Boundaries.geojson")
+
+
+legend <- pal_nlcd()
+legend<-pal_nlcd()
+
+lc_2021 <- raster("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/Landuse_Raster/lulc_2021")
+lc_2019 <- raster("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/Landuse_Raster/lulc_2019")
+lc_2016 <- raster("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/Landuse_Raster/lulc_2016")
+lc_2013 <- raster("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/Landuse_Raster/lulc_2013")
+lc_2011 <- raster("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/Landuse_Raster/lulc_2011")
+
+
+```
+
+```{r lc_2021, echo=FALSE, message=FALSE, warning=FALSE, fig.align='left'}
+s <- stack(lc_2011, lc_2013, lc_2016,lc_2019, lc_2021 )
+
+vals <-unique(s[[5]])  # Get unique values from lc_2021
+df <- legend[legend$ID %in% vals,]  # Filter legend information based on lc_2021 values
+rat5 <- ratify(lc_2021)
+
+myKey <- list(
+  rectangles = list(col = df$Color),
+  text = list(lab = df$Class),
+  space = 'right',
+  columns = 1,
+  size = 2,
+  cex = .6
+)
+
+levelplot(rat5, att='ID', 
+          col.regions=df$Color,
+          maxpixels=ncell(rat5), # Try setting maxpixels to the number of cells in the raster
+          par.settings = list(
+            axis.line = list(col = "transparent"), 
+            strip.background = list(col = 'transparent'), 
+            strip.border = list(col = 'transparent')
+          ), 
+          scales = list(col = "transparent"),
+          colorkey = FALSE,
+          key = myKey,
+          main = "Watauga 2021 Land Cover") # Title added here
+
+```
+
+#### (b) Land Cover - Changes Over 10 Years {.tabset}
+
+From 2011 and 2021 Watauga County witnessed a notable shift in land cover, particularly in terms of development and the reduction of natural landscapes like grasslands and shrub lands. The data indicates a 13.89% increase in developed areas, with significant growth in low, medium, and high-intensity developments. Most notably, medium intensity development saw a significant increase of 17.22% in 2021. Concurrently, the county experienced a dramatic 56.5% decrease in Grassland/Herbaceous areas and a 50% reduction in Shrub/Scrub land. These changes could be attributed to several factors, including the conversion of open fields and grasslands into developed land or possibly into agricultural use. The majority of the land cover remains natural or semi-natural, with developed open spaces also experiencing a small rise. The data suggests a careful balance between development and the maintenance of natural land covers over the past decade.
+
+##### 2011-2021 {.unnumbered}
+
+```{r lc_time_series, echo=FALSE, message=FALSE, warning=FALSE}
+years.list <- list("2011", "2013", "2016", "2019", "2021")
+
+
+saveGIF({
+  for(i in 1:nlayers(s)){
+    rat <- ratify(s[[i]])
+    plot <- levelplot(rat, att='ID',
+                      maxpixels=ncell(rat),
+                      col.regions=df$Color,
+                      par.settings = list(axis.line = list(col = "transparent"), 
+                                          strip.background = list(col = 'transparent'), 
+                                          strip.border = list(col = 'transparent')), 
+                      scales = list(col = "transparent"),
+                      main=paste0("Watauga County land cover ", years.list[[i]]),
+                      colorkey=FALSE,
+                      key = myKey) # Include the key in your plot
+    print(plot)
+  }
+}, interval=1, movie.name="lc_time_series.gif", ani.width=900, ani.height=600)
+```
+
+![](C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/lc_time_series.gif) 
+
+##### 2011 {.unnumbered}
+
+```{r lc_2011, echo=FALSE, message=FALSE, warning=FALSE, fig.width= 8, fig.height=8}
+rat <- ratify(lc_2011)
+
+myKey <- list(
+  rectangles = list(col = df$Color),
+  text = list(lab = df$Class),
+  space = 'right',
+  columns = 1,
+  size = 2,
+  cex = .6
+)
+levelplot(rat, att='ID', 
+          col.regions=df$Color,
+          maxpixels=ncell(rat), # Try setting maxpixels to the number of cells in the raster
+          par.settings = list(
+            axis.line = list(col = "transparent"), 
+            strip.background = list(col = 'transparent'), 
+            strip.border = list(col = 'transparent')
+          ), 
+          scales = list(col = "transparent"),
+          colorkey = FALSE,
+          key = myKey,
+          main = "Watauga 2011 Land Cover") # Title added here
+```
+
+##### 2013 {.unnumbered}
+
+```{r lc_2013, echo=FALSE, message=FALSE, warning=FALSE, fig.width= 8, fig.height=8}
+rat2 <- ratify(lc_2013)
+
+levelplot(rat2, att='ID', 
+          col.regions=df$Color,
+          maxpixels=ncell(rat2), # Try setting maxpixels to the number of cells in the raster
+          par.settings = list(
+            axis.line = list(col = "transparent"), 
+            strip.background = list(col = 'transparent'), 
+            strip.border = list(col = 'transparent')
+          ), 
+          scales = list(col = "transparent"),
+          colorkey = FALSE,
+          key = myKey,
+          main = "Watauga 2013 Land Cover") # Title added here
+```
+
+##### 2016 {.unnumbered}
+
+```{r lc_2016, echo=FALSE, message=FALSE, warning=FALSE, fig.width= 8, fig.height=8}
+rat3 <- ratify(lc_2016)
+
+levelplot(rat3, att='ID', 
+          col.regions=df$Color,
+          maxpixels=ncell(rat3), # Try setting maxpixels to the number of cells in the raster
+          par.settings = list(
+            axis.line = list(col = "transparent"), 
+            strip.background = list(col = 'transparent'), 
+            strip.border = list(col = 'transparent')
+          ), 
+          scales = list(col = "transparent"),
+          colorkey = FALSE,
+          key = myKey,
+          main = "Watauga 2016 Land Cover") # Title added here
+```
+
+##### 2019 {.unnumbered}
+
+```{r lc_2019, echo=FALSE, message=FALSE, warning=FALSE, fig.width= 8, fig.height=8}
+rat4 <- ratify(lc_2019)
+
+levelplot(rat4, att='ID', 
+          col.regions=df$Color,
+          maxpixels=ncell(rat4), # Try setting maxpixels to the number of cells in the raster
+          par.settings = list(
+            axis.line = list(col = "transparent"), 
+            strip.background = list(col = 'transparent'), 
+            strip.border = list(col = 'transparent')
+          ), 
+          scales = list(col = "transparent"),
+          colorkey = FALSE,
+          key = myKey,
+          main = "Watauga 2019 Land Cover") # Title added here
+```
+
+##### 2021 {.unnumbered}
+
+```{r lc_2021_2, echo=FALSE, message=FALSE, warning=FALSE, fig.width= 8, fig.height=8}
+vals <-unique(s[[5]])  # Get unique values from lc_2021
+df <- legend[legend$ID %in% vals,]  # Filter legend information based on lc_2021 values
+rat5 <- ratify(lc_2021)
+
+levelplot(rat5, att='ID', 
+          col.regions=df$Color,
+          maxpixels=ncell(rat5), # Try setting maxpixels to the number of cells in the raster
+          par.settings = list(
+            axis.line = list(col = "transparent"), 
+            strip.background = list(col = 'transparent'), 
+            strip.border = list(col = 'transparent')
+          ), 
+          scales = list(col = "transparent"),
+          colorkey = FALSE,
+          key = myKey,
+          main = "Watauga 2021 Land Cover") # Title added here
+
+```
+
+```{r lc_to_table, cache=TRUE, echo=FALSE, message=FALSE, warning=FALSE}
+options(kableExtra.auto_format = FALSE)
+years<-c(2011, 2013, 2016, 2019, 2021)
+
+d<-df
+for (i in 1:length(years)) {
+  d<-merge(d, freq(s[[i]]), by.x="ID" ,by.y="value", all.y=F, all.x=T)
+  names(d)[ncol(d)]<-paste0("pix_", years[[i]])
+  }
+
+
+d$square.mile.change<-(d$pix_2021 - d$pix_2011) * 30 * 30 * 0.00000038610
+d$percentchange<-(d$pix_2021 - d$pix_2011)/d$pix_2011
+d$prop2021<-d$pix_2021/sum(d$pix_2021)
+
+d$percentchange.2011.2021<-paste(round(100*d$percentchange, 2), "%", sep="")
+d$percent.area.2021<-paste(round(100*d$prop2021, 2), "%", sep="")
+
+kable(d[,c(2,10,13,14)])  %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = F)
+```
+
+### (2) Slope
+
+As a mountainous area, the new developments highly depend on the topography. The slope is a critical factor in determining the feasibility of development. The steeper the slope, the more challenging it is to develop. We used the slope data to identify the areas with steep slopes, which are less likely to be developed.
+
+
+```{r read_slope, echo=FALSE, message=FALSE, warning=FALSE, fig.align='left'}
+
+
+slope <- raster("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/slope_raster/slope.tif")
+
+
+# Set up par settings for no background or margins
+
+plot(slope, axes = FALSE, box = FALSE, main = "Slope Angle")
+
+# Save the plot to a PNG file with high resolution
+suppressMessages({dev.copy(png, filename = "slope_plot.png")
+dev.off()})
+
+
+```
+
+`\n`As 65%(≈33.02°) is the maximum slope suitable for development, we will use 25° as a threshold to identify the areas unsuitable for developments.The plot below shows th reclassified slope degree in the county. The green areas are suitable for development, while the white areas are unsuitable for development.
+
+```{r rec_slope, echo=FALSE, message=FALSE, warning=FALSE, fig.align='left'}
+rec_slope <- raster("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/slope_raster/rec_slope25.tif")
+
+
+plot(rec_slope, axes = FALSE, box = FALSE,
+     main = "Suitability for Development by Slope")
+
+# Save the plot to a PNG file with high resolution
+suppressMessages({dev.copy(png, filename = "rec_slope_plot.png")
+dev.off()})
+
+```
+
+### (3) Distance to Landslide
+
+Landslides pose the primary hazard in Watauga County, and the safety of each parcel correlates with its distance from landslide-prone areas. Illustrated in the provided figure, the northeastern region of Watauga emerges as the safest zone. This safety is partly attributable to the gentle slope characteristic of this particular area.
+
+Note: The white lines in the plots represent gaps between the parcels. They often correlate with streams or roads.
+
+```{r load_natural_data, echo=FALSE, message=FALSE, warning=FALSE}
+landslide = st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Data/natural/landslide.geojson")
+
+watersupply = st_read('https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Data/natural/water_supply.geojson')
+
+line = st_read('https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Data/natural/line.geojson')
+```
+
+```{r parcel_centroid, echo=FALSE, message=FALSE, warning=FALSE}
+# Calculate the centroid of each parcel
+parcel_centroids <- st_centroid(parcel)
+```
+
+```{r parcel_distance, echo=FALSE, message=FALSE, warning=FALSE}
+distance = parcel
+
+# Add a column named 'centroid_geometry' to the parcel dataset
+distance$centroid_geometry <- parcel_centroids
+```
+
+```{r landslide_geometry, echo=FALSE, message=FALSE, warning=FALSE}
+landslide_geometry <- st_geometry(landslide)
+
+# Convert the geometry to a data frame
+landslide_df <- as.data.frame(landslide_geometry)
+```
+
+```{r distance_test, echo=FALSE, message=FALSE, warning=FALSE}
+st_c <- st_coordinates
+st_coid <- st_centroid
+
+test1<-st_c(st_coid(parcel))
+test2<- st_c(st_coid(landslide))
+test3 <- st_c(st_coid(watersupply))
+
+final <- parcel %>%
+    mutate(
+      landslide.nn =
+        nn_function(test1, test2,k=2),
+      watershed.nn = 
+        nn_function(test1, test3, k = 1))
+```
+
+```{r save_landslide, echo=FALSE, message=FALSE, warning=FALSE}
+plot_landslide <-ggplot() +
+      geom_sf(data = final, aes(fill=landslide.nn), colour=NA) +
+  #geom_sf(data = parcel, fill = "transparent", colour = "red", size = 0.005) +  # Adjust the size here
+      scale_fill_viridis(name="Distance") +
+      labs(title="Distance to the Two Nearest Landslide Points") +
+      theme_void() 
+
+plot_landslide
+
+#ggsave("landslide.jpg", plot_landslide, dpi = 300)
+```
+
+### (4) Distance to Watershed
+
+Water supply plays a crucial role in Watauga County's landscape. Given the potential environmental ramifications, it's imperative to maintain a safe distance between the septic systems and the water supply areas. Through comprehensive analysis, it's evident that the middle region of Watauga County is adjacent to these critical water supply zones. Consequently, when installing septic systems in this area, careful attention must be paid to mitigating environmental risks and preventing water pollution.
+
+Note: The white lines in the plots represent gaps between the parcels. They often correlate with streams or roads.
+
+```{r plot_distance_watershed, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+plot_watershed <-ggplot() +
+      geom_sf(data = final, aes(fill=watershed.nn), colour=NA) +
+  #geom_sf(data = parcel, fill = "transparent", colour = "red", size = 0.005) +  # Adjust the size here
+      scale_fill_viridis(name="Distance") +
+      labs(title="Distance to the Nearest Watershed") +
+      theme_void() 
+
+plot_watershed
+
+#ggsave("watersupply.jpg", plot_watershed, dpi = 300)
+```
+
+### (5) Distance to Nearest Road
+
+Accessibility to transportation infrastructure significantly influences the development potential of a parcel. Typically, proximity to the road network directly correlates with higher accessibility. However, the graphic reveals certain parcels lacking adequate access to roads, indicating potential limitations in their development value. Through the analysis we can see that south-west and north-east Watauga are less connected.
+
+Note: The white lines in the plots represent gaps between the parcels. They often correlate with streams or roads.
+
+```{r line_distance, echo=FALSE, message=FALSE, warning=FALSE}
+line <- line %>%
+               rename(Dist_Road = `Road_Dist`)
+line2 <- st_transform(line, st_crs(final))
+combined_df <- cbind(final, line2)
+```
+
+```{r plot_distance_road, echo=FALSE, fig.show='hold'}
+plot_road <-ggplot() +
+      geom_sf(data = combined_df, aes(fill=Dist_Road), colour=NA) +
+  #geom_sf(data = parcel, fill = "transparent", colour = "red", size = 0.005) +  # Adjust the size here
+      scale_fill_viridis(name="Distance") +
+      labs(title="Distance to the Nearest Road") +
+      theme_void() 
+
+plot_road
+
+#ggsave("road.jpg", plot_road, dpi = 300)
+```
+
+### (6) Distance to Nearest Water Body
+
+The presence of water bodies is integral to our evaluation framework. They significantly influence the water table, consequently affecting the design and placement of septic systems. Watauga County boasts a dense network of waterways. Despite this, we prioritize calculating the distance from the center of mass to the nearest river in our assessments. Overall, the variance in proximity to water bodies among parcels is minimal.
+
+Note: The white lines in the plots represent gaps between the parcels. They often correlate with streams or roads.
+
+```{r plot_distance_waterbody, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+plot_waterbody <-ggplot() +
+      geom_sf(data = combined_df, aes(fill=Dist_Flowline), colour=NA) +
+  #geom_sf(data = parcel, fill = "transparent", colour = "red", size = 0.005) +  # Adjust the size here
+      scale_fill_viridis(name="Water Distance") +
+      labs(title="Distance to the Nearest Waterbody") +
+      theme_void()
+
+plot_waterbody
+
+#ggsave("waterbody.jpg", plot_waterbody, dpi = 300)
+```
+
+### (7) Soil
+
+There are over 80 types of soil in Watauga county. The soil type is important for the septic system design and installation. The soil type will also affect the water absorption rate and the depth of the septic system. After searched on the soil database of USDA (United States Department of Agriculture) website, we found that the soil type is classified by the MUSYM (Map Unit Symbol) column. We aggregated the soil type into 3 main categories based on the drainage ability and permeability of the soil. The 3 categories are A-Moderately Rapid Infiltration Rate, B-Moderate Infiltration Rate, C-Low Infiltration Rate. The C type low-infiltration rate and well-drained soil is the best for septic system installation, and the poorly drained soil is the worst.
+
+```{r read_soil, echo=FALSE, message=FALSE, warning=FALSE}
+soil <- st_read('https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Data/natural/soil_type.geojson')
+soil <- st_transform(soil, st_crs(parcel))
+```
+
+```{r}
+color_palette2 <- c("#e2a334","#f1ec99ff", "#9ad7d2ff", "#3e7067ff", "#cfd9e0ff")
+```
+
+```{r plot_soil, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+# Show a map based on column MUSYM, show unique value
+
+plot_soil <- ggplot() +
+  geom_sf(data = soil, aes(fill = Category), color = "transparent") +
+  scale_fill_manual(name = "Soil Type", values = color_palette2, na.value = "white") + # Use custom color palette
+  labs(title="Soil Infiltration Level") +
+  theme_void()
+
+plot_soil
+
+# Save the plot as a high-resolution image
+#ggsave("plot_soil.png", plot_soil, width = 10, height = 8, dpi = 300)
+```
+
+### (8) Natural Area
+
+Watauga County is home to numerous sites designated as natural heritage areas or significant natural areas, recognized at national, state, regional, or county levels. These areas, protected through ownership by federal or state entities or held in private hands, serve as critical habitats for biodiversity, cultural heritage sites, or natural resources. Understanding the precise locations of these protected sites is essential for identifying parcels suitable for development while ensuring conservation efforts are respected.
+
+```{r plot_natural_area_owner, echo=FALSE, fig.show='hold'}
+ggplot() +
+  geom_sf(data = boundary, fill = NA, color = "black") + 
+  geom_sf(data = managed_areas, aes(fill = OWNER_TYPE)) + 
+  scale_fill_manual(values = color_palette) + 
+  labs(title = "Watauga Managed Areas by Owner Type",
+       subtitle = "Year: 2022",
+       color = "Owner Type") +
+  theme_void()
+```
+
+
+### (9) Spatial Lag
+```{r}
+# import spatial lag dataset
+library(dplyr)
+library(sf)
+library(ggplot2)
+
+
+
+
+parcel_spatial_lag <- read.csv("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/PERMIT_SPATIAL_LAG/parcel_spatial_lag.csv")
+
+parcel_spat_lag_merged <- merge(parcel, parcel_spatial_lag, by = "GlobalID")
+parcel_spat_lag_map <- subset(parcel_spat_lag_merged, select = c(GlobalID, permit_17.nn_3, permit_17.nn_5))
+
+# let's map!
+
+plot_spatial_lag_3 <- ggplot() +
+  geom_sf(data = parcel_spat_lag_map, aes(fill = permit_17.nn_3), color = NA, size = 0) +
+  scale_fill_gradient(high = "#e2a334", low = "#74c1b9", breaks = c(5000, 10000, 15000, 20000, 25000)) +
+  labs(title = "Spatial Lag (3)",
+       subtitle = "Year: 2017",
+       fill = "Spatial Lag") +
+  theme_void()
+
+plot_spatial_lag_5 <- ggplot() +
+  geom_sf(data = parcel_spat_lag_map, aes(fill = permit_17.nn_5), color = NA, size = 0) +
+  scale_fill_gradient(high = "#e2a334", low = "#74c1b9",
+                      breaks = c(5000, 10000, 15000, 20000, 25000)) +
+  labs(title = "Spatial Lag (5)",
+       subtitle = "Year: 2017",
+       fill = "Spatial Lag") +
+  theme_void()
+
+  
+plot_spatial_lag_3  
+plot_spatial_lag_5
+
+```
+
+
+
+
+## 2.5 Economic Features
+
+### (1) Property Value
+
+Property value is a critical factor in determining the development potential of a parcel. It is a direct reflection of the market demand and the potential return on investment. The property value is calculated based on the sale price of the property. The higher the property value, the higher the development potential.
+
+```{r read_property_value, echo=FALSE, message=FALSE, warning=FALSE}
+property_value <- st_read("https://drive.google.com/uc?export=download&id=16WIcDkNwXT5aPr92mSY8NaffD2k6m0e7")
+property_value <- st_transform(property_value, st_crs(parcel))
+```
+
+```{r plot_property_value, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+parcel_w_inflation <- read.csv("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/parcel_w_inflation.csv")
+
+parcel_inflation_merged <- merge(parcel, parcel_w_inflation, by = "GlobalID")
+parcel_inflation_map <- subset(parcel_inflation_merged, select = c(GlobalID, inflation17, inflation22))
+
+parcel_inflation_map$inflation17 <- as.numeric(parcel_inflation_map$inflation17)
+
+breaks <- c(0, 5000, 25000, 100000, 400000, Inf)
+labels <- c("0-5000", "5001-25000", "25001-100000", "100001-400000", "greater than 400,000")
+parcel_inflation_map$bins <- cut(parcel_inflation_map$inflation17, breaks = breaks, labels = labels, include.lowest = TRUE)
+
+parcel_inflation_map$bins <- factor(parcel_inflation_map$bins, levels = labels)
+
+ggplot() +
+  geom_sf(data = parcel_inflation_map, aes(fill = bins), color = NA) +
+  scale_fill_manual(
+    values = c("0-5000" = "#eef7f6", 
+               "5001-25000" = "#dcefed", 
+               "25001-100000" = "#b9dfdb", 
+               "100001-400000" = "#74c1b9", 
+               "greater than 400,000" = "#50afa5"),
+    labels = c("less than $5,000", "$5,001-$25,000", "$25,001-$100,000", "$100,001-$400,000", "greater than $400,000"),
+    drop = FALSE
+  ) +
+  labs(
+    title = "Parcel Values (adjusted for inflation)",
+    subtitle = "Year: 2017",
+    fill = "Parcel Value ($)"
+  ) +
+  theme_void()
+
+```
+
+---
+title: "Modeling"
+output: html_document
+date: "2024-04-27"
+---
+
+# 3. Modeling
+
+For our modeling process, we attempted three different models: the logistic model (to calculate probabilities), Random Forest, and Poisson regression (permit number). We've encountered various issues, including overfitting and misleadingly high accuracy rates, which we attribute to our imbalanced dataset—only 0.05 percent of parcels have permits. To address this, we've tried removing parcels with slopes too steep for development and resampling by oversampling the instances with permits (randomly duplicating the 1’s), yet we still end up with similar challenges. Below, you will find the results of these three models to assist in deciding which model type is best to proceed with.
+
+## 3.1 Loading Data
+Here we load the dataset filtered out the developed and unable to develop (steep slope) parcels as our dataset used for model training. In order to tackle the imbalanced problem of our dataset (1% of '1' and 99% of '0'), we randomly duplicate the '1' in our datset and reach the ratio of 10% of '1' and 90% '0'.
+
+```{r load_data3, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+# The dataset filtered out the developed and unable to develop (steep slope) parcels
+filter_no_resample <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Resample/0422_data/data_filtered.csv")
+
+# Join back all the columns needed to the filtered dataset (such as Dist_Waterbody, Dist_Road, etc.)
+joined_filtered_df <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Resample/0422_data/joined_filtered_df.csv")
+
+# The original dataset with all parcels and columns
+df_original <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Resample/0422_data/original_dataset_47265.csv")
+
+# The resampled filtered joined dataset (randomly duplicate 1 to oversample the ratio of 1 to 10% of the total numbers of parcels)
+resample <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Resample/0422_data/resample.csv")
+
+# The parcel geojson
+parcel = st_read('https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Data/natural/parcel.geojson')
+
+# The property value adjusted with inflation
+inflation <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Data/parcel_w_inflation.csv")
+
+# Spatial lag of 2017 and 2022 septic permits knn=3, 4, 5
+permit_nn <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Data/PERMIT_SPATIAL_LAG/parcel_spatial_lag.csv")
+
+# Read the 2017 and 2022 permit data
+permit_17 <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/GeoJSON/clipped_permit17.geojson")
+
+permit_22 <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/GeoJSON/clipped_permit22.geojson")
+```
+
+
+```{r convert_numeric, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+# Convert the dataframe columns to numeric
+resample <- resample %>%
+  mutate_if(~ !identical(., resample$GlobalID), as.numeric)
+
+resample <- na.omit(resample)
+```
+
+
+## 3.2 Random Forest Model
+Firstly, we prepare the training dataset by dropping the 'GlobalID' and 'n_permit_22' columns. And set the 'permit_22' column as our target variable. Then we standarize all the independent variables in the dataset.
+
+```{r refine_data, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+# Drop the 'GlobalID' and 'n_permit_22' columns to train the model
+refined_data <- resample%>%dplyr::select(-GlobalID,-n_permit_22)
+```
+
+
+```{r data_scale, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+data_scaled <- refined_data
+
+# Standardize all columns except 'permit_22' (target variable)
+data_scaled[, names(data_scaled) != "permit_22"] <- scale(data_scaled[, names(data_scaled) != "permit_22"])
+```
+
+```{r index_data, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+# Identify the index of the 'permit_22' column
+permit_22_index <- which(names(data_scaled) == "permit_22")
+
+# Reorder the columns with 'permit_22' as the first column
+data_scaled <- data_scaled[, c(permit_22_index, setdiff(1:ncol(data_scaled), permit_22_index))]
+```
+
+To determine the variables with the greatest significance, that could be used for model training, we plot out the correlation matrix and a bar chart to show the p-value of the independent variables. Then we choose 13 most significant variables to include in our training.
+
+### Correlation Matrix
+The correlation matrix shows that the 'Slope_Ave', 'Slope_Max', 'permit_17.nn_3', 'permit_17.nn_4', 'permit_17.nn_5', 'Pasture_Hay', 'Developed_Medium_Intensity', 'permit_17', 'YRBUILT' and 'Dist_Flowline' are the most correlated variables.
+
+```{r corr_matrix, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+# Compute the correlation matrix
+cor_matrix <- round(cor(data_scaled), 1)
+
+# Plot the correlation matrix
+plot <- ggcorrplot(
+  cor_matrix, 
+  p.mat = cor_pmat(data_scaled),
+  colors = c("#25CB10", "white", "#FA7800"),
+  type = "lower",
+  insig = "blank"
+) +  
+  labs(title = "Correlation across numeric variables")+
+   theme(
+    axis.text.x = element_text(size = 5),  # Adjust x-axis label size
+    axis.text.y = element_text(size = 5)   # Adjust y-axis label size
+  )
+
+plot
+
+# Export the plot to a file
+ggsave("correlation_matrix.jpg", plot, width = 10, height = 8, dpi = 300)
+```
+
+### P-value Bar Chart
+Similar to the result of the correlation matrix, the p-value bar chart shows that the 'permit_17', 'Slope_Ave', 'Slope_Max', 'permit_17.nn_3', 'permit_17.nn_4', 'permit_17.nn_5', 'Pasture_Hay', 'Developed_Medium_Intensity', 'permit_17', 'YRBUILT', 'Dist_Flowline', 'Dist_Road', 'Developed_High_Intensity', 'Developed_Low_Intensity', 'Developed_Open_Space', 'Soil_A' and 'infaltion_17' are the most correlated variables.
+
+```{r variable_significance, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+# Plot a bar chart to see the variables' correlation to the target variable
+# Initialize vectors to store results
+correlations <- numeric()
+p_values <- numeric()
+# Exclude both 'permit_22' and 'YRBUILT' from the list of variables
+variables <- names(data_scaled)[!names(data_scaled) %in% c("permit_22", "YRBUILT")]
+
+# Loop through columns and compute correlation test with 'permit_22'
+for (var in variables) {
+  test_result <- cor.test(data_scaled[[var]], data_scaled$permit_22, method = "pearson", use = "complete.obs")
+  correlations <- c(correlations, test_result$estimate)
+  p_values <- c(p_values, test_result$p.value)
+}
+
+# Combine results into a dataframe
+results_df <- data.frame(
+  Variable = variables,
+  Correlation = correlations,
+  P_Value = p_values
+)
+
+# Order dataframe by p-value, largest to smallest for plotting
+results_df <- results_df %>%
+  arrange(desc(P_Value))
+
+# Plot using ggplot2
+plot_corr <- ggplot(results_df, aes(x = reorder(Variable, -P_Value), y = Correlation, fill = -log10(P_Value))) +
+  geom_bar(stat = "identity") +
+  coord_flip() +  # Make the bar plot horizontal
+  scale_fill_continuous(name = "-log10(P-value)", low = "red", high = "blue") +
+  theme_minimal() +
+  xlab("Variable") +
+  ylab("Correlation with permit_22") +
+  ggtitle("Correlation of Variables with permit_22 by Significance")
+
+# Print the plot
+plot_corr
+
+# Export the plot to a file
+ggsave("p-value.jpg", plot_corr, width = 10, height = 8, dpi = 300)
+```
+
+### Choose Features
+So we include the target variabl 'permit_22' and 15 features into the model. The features are 'permit_17', 'Slope_Ave', 'Slope_Max', 'permit_17.nn_3', 'permit_17.nn_4', 'permit_17.nn_5', 'Pasture_Hay', 'Developed_Medium_Intensity', 'permit_17', 'Dist_Flowline', 'Dist_Road', 'Developed_High_Intensity', 'Developed_Low_Intensity', 'Developed_Open_Space', and 'infaltion_17'
+
+```{r choose_features, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+# Include 16 features into the model
+model_data <- resample %>%
+  dplyr::select(permit_22, permit_17, permit_17.nn_3, permit_17.nn_4, permit_17.nn_5, Slope_Ave, Slope_Max, Dist_Flowline, Developed_Medium_Intensity, Pasture_Hay, Dist_Road, Developed_High_Intensity, Developed_Low_Intensity, Developed_Open_Space, inflation17, area) %>%
+  dplyr::rename(
+    permit = permit_22,
+    permit_lag = permit_17,
+    permit_lag.nn_3 = permit_17.nn_3,
+    permit_lag.nn_4 = permit_17.nn_4,
+    permit_lag.nn_5 = permit_17.nn_5,
+    property_value = inflation17
+  )
+```
+
+```{r export_csv_for_spatial_cv, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+write.csv(model_data, "model_data.csv", row.names = FALSE)
+```
+
+```{r standarize_model_data, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+model_data_scaled <- model_data
+
+# Standardize all columns except 'permit' (target variable)
+model_data_scaled[, names(model_data_scaled) != "permit"] <- scale(model_data_scaled[, names(model_data_scaled) != "permit"])
+```
+
+### Data split
+We split our dataset into training and testing sets using the `initial_split()` function from the `rsample` package. We use 80% of the data for training and 20% for testing. The `set.seed()` function is used to ensure reproducibility.
+```{r data_split, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+# Ensure the permit variable is converted to a factor
+model_data_scaled$permit <- as.factor(model_data_scaled$permit)
+
+# Split the data into training and testing sets
+set.seed(123) # for reproducibility
+split <- initial_split(model_data_scaled, prop = 0.8)
+train_data <- training(split)
+test_data <- testing(split)
+
+# Define recipe for data preprocessing
+recipe <- recipe(permit ~ ., data = train_data) %>%
+  step_scale(all_predictors()) %>%
+  step_center(all_predictors())
+```
+
+### Hyperparameter Tuning & Cross Validation
+Next, set up the hyperparameter grid for tuning:
+
+```{r hyperparameter_grid, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+# Define the model specification
+rf_spec <- rand_forest(
+  trees = 1500,
+  mtry = tune(),
+  min_n = tune()
+) %>%
+  set_engine("randomForest") %>%
+  set_mode("classification")
+
+# Define the grid of hyperparameters
+grid <- grid_regular(
+  mtry(range = c(3, 15)),
+  min_n(range = c(1000, 2000)),
+  levels = 3
+)
+```
+
+Hyperparameter tuning and cross-validation are performed using the `tune_grid()` function from the `tune` package. We specify the metrics to optimize for, including ROC AUC, accuracy, sensitivity, precision, and F1 score.
+``` {r tuning, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+# Define a metric set including the new metrics
+custom_metrics <- metric_set(roc_auc, accuracy, sens, ppv, f_meas)
+
+# Perform tuning with these metrics
+tune_results <- tune_grid(
+  rf_spec,
+  recipe,
+  resamples = vfold_cv(train_data, v = 5),
+  grid = grid,
+  metrics = custom_metrics
+)
+```
+
+``` {r tuning_results, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+# View best parameters
+best_params <- select_best(tune_results, metric = "accuracy")
+print(best_params)
+```
+
+Finally, finalize the model with the best parameters and evaluate it on the te`st set.
+
+```{r final_model, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+# Refit the model using the best parameters
+final_rf_spec <- rand_forest(
+  trees = 1500,
+  mtry = best_params$mtry,
+  min_n = best_params$min_n
+) %>%
+  set_engine("randomForest") %>%
+  set_mode("classification")
+
+# Bundle the pre-processing recipe and model into a workflow
+final_workflow <- workflow() %>%
+  add_recipe(recipe) %>%
+  add_model(final_rf_spec)
+
+# Fit the final model on the entire training data
+final_fit <- fit(final_workflow, data = train_data)
+
+# Use the predict function to get the class predictions
+test_predictions <- predict(final_fit, test_data, type = "class")
+
+# Ensure both are factors with the same levels
+test_data$permit <- factor(test_data$permit, levels = c("0", "1"))
+test_predictions$.pred_class <- factor(test_predictions$.pred_class, levels = c("0", "1"))
+
+# Create the confusion matrix
+conf_matrix <- confusionMatrix(data = test_predictions$.pred_class, reference = test_data$permit)
+
+# View the confusion matrix
+print(conf_matrix)
+```
+
+## 3.3 Spatial Cross-Validation
+
+```{r zip_code, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+ZipCodes <- st_read("https://raw.githubusercontent.com/JarredERandall/Musa_801_Watauga/main/Data/WataugaZipCodes/WataugaZipCodes.geojson")
+
+ZipCodes <- st_transform(ZipCodes, st_crs(parcel))
+```
+
+```{r join_zipcode, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+parcels_w_zip <- st_join(parcel, ZipCodes, join = st_within)
+parcels_w_zipSAVE <- parcels_w_zip
+#parcels_w_zip <- parcels_w_zipSAVE
+```
+
+```{r parcels_w_zip, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+parcels_w_zip <- data.frame(parcels_w_zip$GlobalID, parcels_w_zip$GEOID20)
+```
+
+```{r resample_forJoining, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+resample_forJoining <- resample[, c("GlobalID", "permit_22")]
+
+#test_data_wID = GlobalID + ID
+#rf_pred = GlobalID + predictions
+# permit_wID = ID + permits 
+
+# to get GlobalID to match with permits and predictions, join permit_wID and test_data_wID by ID (only keep ID, GlobalID, and permits). 
+
+permits_ID_Global <- test_data_wID %>%
+                        left_join(permit_wID, by = "ID")
+
+permits_ID_Global <- permits_ID_Global[, c("GlobalID", "ID", "permit")]
+
+prediction_join <- permits_ID_Global %>%
+                        left_join(rf_pred, by = "GlobalID")
+
+prediction_join <- prediction_join[, c("GlobalID", "ID", "permit", "rf_predictions")]
+
+final_join <- prediction_join %>%
+                        left_join(parcels_w_zip, by = "GlobalID")
+
+final_join <- final_join[, c("GlobalID", "ID", "permit", "rf_predictions", "GEOID20")]
+```
+
+
+Capturing the predicted values of the test set
+```{r final_join, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+final_join$success <- ifelse(final_join$permit == final_join$rf_predictions, 1, 0)
+outcomeSAVE <- final_join
+
+outcome <- outcomeSAVE
+```
+
+Join GlobalID, zip code, and result columns
+
+```{r outcome, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+outcome <- outcome %>%
+              filter(!is.null(GEOID20)) %>%
+              filter(!is.na(success)) %>%
+              distinct()
+```
+
+Group by Zip Code
+Summarize by dividing (number of successes per zip code) / (total rows per zip code)
+```{r outcomeZip, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+outcomeZip <- outcome %>%
+  group_by(GEOID20) %>%
+  summarize(successRate = sum(success == 1) / n())
+
+write.csv(outcomeZip, "outcomeZip.csv")
+```
+
+
+# 4. Predict for 2027
+
+```{r merge_22_data, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+# Join the inflation 2022 data to the resampled dataset
+df_22 <- joined_filtered_df %>%
+  left_join(dplyr::select(inflation, c("GlobalID", inflation22)), by = "GlobalID")
+
+# Join the 2022 septic permit spatial lag data to the resampled dataset
+df_22 <- df_22 %>%
+  left_join(dplyr::select(permit_nn, GlobalID, permit_22.nn_3, permit_22.nn_4, permit_22.nn_5), by = "GlobalID")
+```
+
+```{r convert_num_df_22_data, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+df_22 <- df_22 %>%
+  mutate_if(~ !identical(., df_22$GlobalID), as.numeric)
+
+df_22 <- na.omit(df_22)
+```
+
+
+```{r predict_data, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+predict_data <- df_22 %>%
+  dplyr::select(GlobalID, permit_22, permit_22.nn_3, permit_22.nn_4, permit_22.nn_5, Slope_Ave, Slope_Max, Dist_Flowline, Developed_Medium_Intensity, Pasture_Hay, Dist_Road, Developed_High_Intensity, Developed_Low_Intensity, Developed_Open_Space, inflation22, area) %>%
+  dplyr::rename(
+    permit_lag = permit_22,
+    permit_lag.nn_3 = permit_22.nn_3,
+    permit_lag.nn_4 = permit_22.nn_4,
+    permit_lag.nn_5 = permit_22.nn_5,
+    property_value = inflation22
+  )
+
+write.csv(predict_data, "predict_data.csv")
+```
+
+```{r df_no_id, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+df_no_id <- dplyr::select(predict_data, -GlobalID)
+
+# Standardize all columns in the predict data
+scaled_pred_df <- scale(df_no_id)
+```
+
+```{r predict, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+rf_predictions <- predict(final_fit, new_data = scaled_pred_df, type = "prob")
+predictions_result <- as.data.frame(rf_predictions)
+```
+
+```{r predict_data}
+result_data <- predict_data
+result_data$"Dvpt_Prob" <- predictions_result$`1`
+```
+
+```{r parcelid, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+parcelid <- parcel%>%dplyr::select("GlobalID", "PARCELID","geometry")
+```
+
+
+```{r convert_acre, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+# Convert the 'area' column unit to acre
+result_data$area_acre <- result_data$area / 43560
+```
+
+
+```{r merge, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+merged <- merge(result_data, parcelid, by = "GlobalID", all.x = TRUE)
+```
+
+```{r geojson_write, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+st_write(merged, "prediction_0422.geojson", driver = "GeoJSON")
+```
+
+``` {r merge_load, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+# Convert 'merged_data' to an sf object
+merged_data_sf <- st_read("E:/UPenn/24Spring/MUSA_Practicum/Modeling/0422/prediction_0422.geojson")
+```
+
+
+```{r plot_prediction, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+#install.packages("scales")
+library(scales)
+
+plot_dvpt_prob <- ggplot() +
+  geom_sf(data = merged_data_sf, aes(fill=Dvpt_Prob), colour=NA) +
+  scale_fill_gradientn(colors=c("grey", "lightgrey", "orange", "red"),
+                       values=rescale(c(0, 0.4, 0.6, 1)),
+                       name="Development Probability") +
+  labs(title="Development Probability of Parcels") +
+  theme_void()
+
+plot_dvpt_prob
+
+ggsave("plot_dvpt_prob.jpg", plot = plot_dvpt_prob, width = 20, height = 16, units = "in", dpi = 300)
+
+names(merged_data_sf)
+```
+
+```{r plot_as_point, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+# Assuming your sf object is named 'parcel_data'
+parcel_centroid <- merged_data_sf
+parcel_centroid$geometry <- st_centroid(parcel_centroid$geometry)
+```
+
+```{r high_prob_parcel, , echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+# Filter Parcels With Dvpt_Prob Greater Than 0.5
+high_prob_parcels <- parcel_centroid %>%
+  filter(Dvpt_Prob > 0.6)
+```
+
+```{r plot_predict, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+plot_predict <- ggplot(data = parcel) +
+  geom_sf(aes(geometry = geometry), color = "lightgrey", size = 0.1, fill = NA) +  
+  geom_sf(data = high_prob_parcels, aes(geometry = geometry, color = Dvpt_Prob), size = 2) +  
+  scale_color_gradientn(colors = c("#74c1b9", "#9ad7d2", "#fcd977", "#f9bf3e", "#e2a334")) +  
+  labs(title = "Suitable Places for Development in 2027 (Prob>60%)",
+       color = "Development Probability") +
+  theme_void() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 16)  # Center and bold the title
+  )
+
+print(plot_predict)
+
+ggsave("plot_dvpt_prob_point.jpg", plot = plot_predict, width = 10, height = 8, units = "in", dpi = 300)
+```
+
+### Overlapping with the 2017 and 2022 Permit Data
+
+
+```{r transfer_crs, echo=FALSE, message=FALSE, warning=FALSE}
+# transfer the crs of permit_17 and permit_22 to the same coordinate system as boundary and parcel
+permit_17 <- st_transform(permit_17, st_crs(parcel))
+permit_22 <- st_transform(permit_22, st_crs(parcel))
+```
+
+```{r plot_overlap, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+plot_overlap <- ggplot(data = parcel) +
+  geom_sf(aes(geometry = geometry), color = "lightgrey", size = 0.1, fill = NA) +  
+  geom_sf(data = permit_17, color = "darkblue", size = 1, alpha = 0.4) +
+  geom_sf(data = permit_22, color = "darkred", size = 1, alpha = 0.4) +
+  geom_sf(data = high_prob_parcels, aes(geometry = geometry, color = Dvpt_Prob), size = 2, alpha=0.8) +  
+  scale_color_gradientn(colors = c("#74c1b9", "#9ad7d2", "#fcd977", "#f9bf3e", "#e2a334")) +  
+  labs(title = "Suitable Places for Development in 2027 (Prob>60%)",
+       color = "Development Probability") +
+  theme_void() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 16)  # Center and bold the title
+  )
+
+print(plot_overlap)
+
+ggsave("plot_overlap.jpg", plot = plot_overlap, width = 10, height = 8, units = "in", dpi = 300)
+```
+
+### Export the prediction geojson file for application development
+```{r filter, echo=FALSE, message=FALSE, warning=FALSE}
+# Convert 'merged_data_sf' from an sf object to a regular dataframe for joining
+filter_df <- as.data.frame(merged_data_sf)
+
+# Assuming 'filter_df' contains some of the same columns as 'parcel' plus some new ones
+# Identify columns in 'filter_df' not present in 'parcel'
+new_columns <- setdiff(names(filter_df), names(parcel))
+
+# Columns to keep from 'filter_df' (new columns plus 'GlobalID')
+columns_to_keep <- c("GlobalID", new_columns)
+
+# Selecting only the necessary columns from 'filter_df' before the join
+filter_df_selected <- dplyr::select(filter_df, all_of(columns_to_keep))
+
+# Joining 'parcel' with the selected columns from 'filter_df'
+full_df <- left_join(parcel, filter_df_selected, by = "GlobalID")
+
+write.csv(full_df, "full_df.csv")
+```
+
+```{r full_df_add2col, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+# Add 'undevelopable' and 'developed' columns to 'full_df'
+full_df_add_2_col <- full_df %>%
+  mutate(
+    # Creating 'undevelopable' column
+    undevelopable = case_when(
+      !is.na(Dvpt_Prob) ~ 0,            # If 'Dvpt_Prob' is not NA, set value to 0
+      is.na(Dvpt_Prob) & Slope_Ave <= 19 ~ 0,  # If 'Dvpt_Prob' is NA and 'Slope_Ave' <= 19, set value to 0
+      TRUE ~ 1                          # Otherwise, set value to 1
+    ),
+
+    # Creating 'developed' column
+    developed = case_when(
+      !is.na(Dvpt_Prob) ~ 0,            # If 'Dvpt_Prob' is not NA, set value to 0
+      is.na(Dvpt_Prob) & YRBUILT <= 0 ~ 0,  # If 'Dvpt_Prob' is NA and 'YRBUILT' <= 0, set value to 0
+      TRUE ~ 1                          # Otherwise, set value to 1
+    )
+  )
+
+write.csv(full_df_add_2_col, "full_df_add_2_col.csv")
+```
+
+```{r df_selection, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+# Only keep columns 'Dvpt_Prob', 'permit_lag', 'Slope_Ave', 'Slope_Max', 'Dist_Road', 'property_value', 'area_acre', 'PARCELID', 'geometry', 'undevelopable', 'developed'
+full_df_selected <- full_df_add_2_col %>%
+  dplyr::select(GlobalID, Dvpt_Prob, PARCELID, undevelopable, developed, geometry)
+```
+
+```{r fillna, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+# Fill the NA values in 'Dvpt_Prob' with 0
+full_df_selected$Dvpt_Prob[is.na(full_df_selected$Dvpt_Prob)] <- 0
+```
+
+```{r original_select, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+# I want the columns: permit_22(name it as 'permit_lag' after join), Slope_Ave, Slope_Max, Dist_Road, area from the 'df_original' to join it back to 'full_df_selected' by 'GlobalID'
+
+# Select and rename the columns in 'df_original'
+df_original_selected <- df_original %>%
+  dplyr::select(GlobalID, permit_22, Slope_Ave, Slope_Max, Dist_Road, area) %>%
+  rename(permit_lag = permit_22)
+
+# Joining 'full_df_selected' with the modified 'df_original'
+full_df_final_1 <- left_join(full_df_selected, df_original_selected, by = "GlobalID")
+```
+
+```{r convert_area_tonumerci, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+# Convert the 'area' column to numeric
+full_df_final_1$area <- as.numeric(full_df_final_1$area)
+
+# Convert the 'area' column unit to acre
+full_df_final_1$area_acre <- full_df_final_1$area / 43560
+
+# Then drop the column 'area'
+full_df_final_2 <- full_df_final_1 %>%
+  dplyr::select(-area)
+```
+
+```{r join_infalation, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+# Join the 'inflation22' column from dataframe 'inflation' as 'property_value' to 'full_df_final_2' by GlobalID
+# Selecting and renaming the column in 'inflation'
+inflation_selected <- inflation %>%
+  dplyr::select(GlobalID, inflation22) %>%
+  rename(property_value = inflation22)
+
+# Joining 'full_df_final_2' with the modified 'inflation' dataframe
+full_df_final_3 <- left_join(full_df_final_2, inflation_selected, by = "GlobalID")
+```
+
+```{r final_df_write, echo=FALSE, fig.show='hold', message=FALSE, warning=FALSE}
+# Write the final dataframe to a geojson file
+sf::st_write(full_df_final_3, "prediction_final.geojson")
+```
+
+# 5. Application Development
+App Link: https://seuha.github.io/watauga-app/
