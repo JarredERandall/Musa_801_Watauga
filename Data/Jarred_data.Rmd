@@ -61,7 +61,7 @@ municipal_bound <- st_read("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Wa
 county_bound <- st_read("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/GeoJSON/NCDOT_County_Boundaries.geojson")
 
 parcels <- st_read("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/parcel/parcel.geojson")
-
+parcels <- st_read("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/parcel/parcel.geojson")
 # Landcover Vector
 
 legend<-pal_nlcd()
@@ -71,6 +71,99 @@ lc_2019 <- raster("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Dat
 lc_2016 <- raster("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/Landuse_Raster/lulc_2016")
 lc_2013 <- raster("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/Landuse_Raster/lulc_2013")
 lc_2011 <- raster("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/Landuse_Raster/lulc_2011")
+
+dem <- raster("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/Data/Landuse_Raster/lulc_2011")
+
+# Using subset to keep rows where YRBUILT is NOT greater than 0
+parcel_data_filtered <- subset(parcels, YRBUILT <= 0)
+
+permit_17 <-read.csv("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/data/permit/permit_17_summary.csv")
+
+permit_22 <-read.csv("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/data/permit/permit_22_summary.csv")
+
+parcel_complete <-read.csv("C:/Users/fatbo/OneDrive/Documents/GitHub/Musa_801_Watauga/data/Jarred_data_files/final_dataset.csv")
+
+yr_built <- parcels %>%
+  dplyr::select(GlobalID, YRBUILT)
+
+yr_built$geometry <- NULL
+
+
+result <- left_join(parcel_complete, permit_17, by = "GlobalID") %>%
+   mutate(
+    permit_17 = replace_na(n_permit_17, 0),
+  )
+  
+result2 <- left_join(result, yr_built, by = "GlobalID") %>%
+  dplyr::select(-n_permit_17)
+
+result_filtered <- result2 %>%
+  filter(!(YRBUILT > 0 & permit_17 == 0 & n_permit_22 == 0))
+
+
+result_filtered_slope <- result_filtered %>%
+  filter(!(Slope_Ave > 19 & permit_17 == 0 & n_permit_22 == 0))
+
+
+write.csv(result_filtered_slope, "data_filtered.csv", row.names = FALSE)
+
+weather <-read.csv("C:/Users/fatbo/Downloads/3674700.csv")
+
+data <- read.csv("C:/Users/fatbo/Downloads/3674700.csv")
+
+data$DATE <- as.Date(data$DATE, format = "%Y-%m-%d") # Adjust the format according to your date data
+
+# Ensure TMAX is numeric (if not already)
+data$TMAX <- as.numeric(data$TMAX)
+
+# Group by station and month, and calculate the maximum of the average temperatures
+result <- data %>%
+  group_by(STATION, month = month(DATE, label = TRUE, abbr = TRUE)) %>%
+  summarise(MaxAvgTemperature = max(mean(TMAX, na.rm = TRUE)), .groups = 'drop')
+
+# View the results
+print(result)
+print(result)
+
+print(names(data))
+data$DATE <- as.Date(data$DATE, format = "%Y-%m-%d") # Adjust the format according to your date data
+
+# Ensure TMAX is numeric (if not already)
+data$TMAX <- as.numeric(data$TMAX)
+
+# Calculate the average of the maximum temperatures for each station across all months
+result <- data %>%
+  group_by(STATION) %>%
+  summarise(AvgMaxTemp = mean(TMAX, na.rm = TRUE)) %>%
+  pivot_wider(names_from = STATION, values_from = AvgMaxTemp)
+
+# View the results
+print(result)
+
+
+# Load necessary libraries
+library(dplyr)
+library(lubridate)
+library(tidyr)
+
+
+# Convert date to date format if it's not already
+data$DATE <- as.Date(data$DATE, format = "%Y-%m-%d") # Adjust the format according to your date data
+
+# Check for non-numeric values in TMAX and convert to NA
+data$TMAX <- as.numeric(as.character(data$TMAX))
+if (any(is.na(data$TMAX))) {
+  warning("NA introduced by coercion")
+}
+
+# Calculate the average of the maximum temperatures for each station across all months
+result <- data %>%
+  group_by(STATION) %>%
+  summarise(AvgMaxTemp = mean(TMAX, na.rm = TRUE), .groups = 'drop') %>%
+  pivot_wider(names_from = STATION, values_from = AvgMaxTemp)
+
+# View the results
+print(result)
 
 
 ```
