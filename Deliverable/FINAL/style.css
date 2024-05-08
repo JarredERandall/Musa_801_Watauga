@@ -1,0 +1,51 @@
+/* ----------- HEADER IMAGE ----------- */
+
+header {
+	background-image: url('logo.png');
+	background-repeat: no-repeat;
+	background-size: contain;
+	background-position: right top
+	
+}
+
+h1, h2, h3, h4, h5, h6 {
+	font-family: 'Arial';
+	text-align: right;
+}
+
+.title {
+	font-size: 18px;
+}
+
+.subtitle {
+	font-size: 16px;
+}
+
+
+img {
+    display: block;
+    margin: 0 auto;
+}
+
+
+/* ----------- LOGO BEFORE TOC ----------- */
+#TOC::before{
+	content: ""
+	display: block;
+	height: 100px;
+	margin: 20px 20px 40px 20px;
+	background-image: url("logo.png");
+	background-size: contain;
+	background-position: center center;
+	background-repeat: no-repeat;
+}
+
+
+
+/* ----------- TABLE OF CONTENTS ----------- */
+
+.tocify{
+	border: none;
+	border-radius: 0px;
+	font-size: 14px;
+}
